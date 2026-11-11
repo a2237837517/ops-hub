@@ -462,6 +462,7 @@
       pollJob();
     } catch (error) {
       appendTerminal(`ERROR: ${error.message}\n`);
+      if (!input.value) input.value = command;
       state.terminalBusy = false;
       setTerminalStatus('error', 'error');
       $('job-info').textContent = '';
