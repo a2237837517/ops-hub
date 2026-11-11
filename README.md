@@ -402,7 +402,9 @@ Reverse proxy:
 - Increase `proxy_read_timeout` for long-lived WebSockets.
 - Increase `client_max_body_size` if uploading large files through the UI.
 
-See [docs/deploy.md](docs/deploy.md) for details.
+See [docs/deploy.md](docs/deploy.md) for the mode index, or read
+[docs/deploy-mcphub.md](docs/deploy-mcphub.md) (only MCPHub public) and
+[docs/deploy-standalone.md](docs/deploy-standalone.md) (own domain).
 
 ---
 

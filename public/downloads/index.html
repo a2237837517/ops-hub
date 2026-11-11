@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ops Hub · 客户端下载</title>
+  <style>
+    :root {
+      --bg: #0d1319;
+      --panel: #17212b;
+      --panel-2: #1c2834;
+      --border: #2a3a48;
+      --text: #dbe6f1;
+      --muted: #8c9caf;
+      --accent: #45c2ff;
+      --green: #3ddc97;
+      --shadow: 14px 14px 34px rgba(0, 0, 0, .55), -8px -8px 24px rgba(255, 255, 255, .025);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(900px 500px at 50% -10%, #163246 0, transparent 60%),
+        linear-gradient(145deg, #0d141b, #0a1016 70%);
+      font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 48px 22px 70px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 34px; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .logo {
+      width: 46px; height: 46px; border-radius: 14px;
+      display: grid; place-items: center;
+      background: linear-gradient(145deg, #1d3140, #101820);
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.06);
+      color: var(--accent); font-size: 22px;
+    }
+    h1 { margin: 0; font-size: 25px; letter-spacing: .02em; }
+    .sub { color: var(--muted); margin-top: 3px; font-size: 13px; }
+    .badge {
+      color: var(--green); border: 1px solid rgba(61,220,151,.28);
+      background: rgba(61,220,151,.08); border-radius: 999px;
+      padding: 4px 10px; font-size: 12px; white-space: nowrap;
+    }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+    .card {
+      background: linear-gradient(145deg, #1a2632, #121a22);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 18px;
+      padding: 22px;
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.05);
+    }
+    .card h2 { margin: 0 0 6px; font-size: 19px; }
+    .card p { color: var(--muted); margin: 0 0 16px; font-size: 13px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 10px 15px; border-radius: 10px; text-decoration: none;
+      color: var(--text); background: linear-gradient(145deg, #1e2d3a, #121b24);
+      border: 1px solid rgba(255,255,255,.08);
+      box-shadow: 5px 5px 12px rgba(0,0,0,.45), -3px -3px 9px rgba(255,255,255,.025);
+      font-size: 13px; cursor: pointer;
+    }
+    .btn:hover { border-color: rgba(69,194,255,.55); }
+    .btn.primary {
+      color: #06121b; font-weight: 700;
+      background: linear-gradient(145deg, #4ac8ff, #2d9fd6);
+      border-color: rgba(95,210,255,.8);
+      box-shadow: 5px 5px 14px rgba(0,0,0,.45), 0 0 18px rgba(69,194,255,.16);
+    }
+    .btn small { font-weight: 400; opacity: .7; margin-left: 6px; }
+    .steps {
+      margin-top: 22px;
+      background: linear-gradient(145deg, #17222c, #10171e);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 18px; padding: 22px;
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.04);
+    }
+    .steps h2 { margin: 0 0 10px; font-size: 18px; }
+    ol { margin: 0 0 0 20px; padding: 0; }
+    li { margin: 8px 0; color: var(--text); }
+    code {
+      background: #081017; border: 1px solid var(--border);
+      border-radius: 5px; padding: 1px 6px; color: #9fdcff;
+      font-family: "JetBrains Mono", Consolas, monospace; font-size: 12px;
+    }
+    .warn {
+      margin-top: 18px; padding: 12px 14px; border-radius: 10px;
+      border: 1px solid rgba(255,196,80,.25);
+      background: rgba(255,196,80,.07); color: #ffd88c; font-size: 12.5px;
+    }
+    .foot { margin-top: 28px; color: #657586; font-size: 12px; text-align: center; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="logo">▣</div>
+        <div>
+          <h1>Ops Hub 客户端下载</h1>
+          <div class="sub">Windows / Linux Agent 安装包 · 只安装到授权设备</div>
+        </div>
+      </div>
+      <div class="badge">Authorized use only</div>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <h2>🪟 Windows</h2>
+        <p>Windows Server 2008 R2 / 2012 / 2016 / 2019 / 2022，Windows 10/11</p>
+        <div class="actions">
+          <a class="btn primary" href="ops-agent-windows-amd64.zip" download>Windows x64 <small>zip</small></a>
+          <a class="btn" href="ops-agent-windows-386.zip" download>Windows x86 <small>zip</small></a>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>🐧 Linux</h2>
+        <p>主流 x86_64 / arm64 发行版：CentOS、Ubuntu、Debian、Rocky 等</p>
+        <div class="actions">
+          <a class="btn primary" href="ops-agent-linux-amd64.tar.gz" download>Linux x64 <small>tar.gz</small></a>
+          <a class="btn" href="ops-agent-linux-arm64.tar.gz" download>Linux arm64 <small>tar.gz</small></a>
+          <a class="btn" href="ops-agent-linux-386.tar.gz" download>Linux x86 <small>tar.gz</small></a>
+        </div>
+      </section>
+    </div>
+
+    <section class="steps">
+      <h2>安装步骤</h2>
+      <ol>
+        <li>下载对应系统的安装包，解压到目标机器。</li>
+        <li>把 <a href="config.example.json" download>config.example.json</a> 复制为 <code>config.json</code>，填写 <code>server</code> 和 <code>enrollmentToken</code>（由管理员提供）。</li>
+        <li>Windows：右键 <code>install.bat</code> → 以管理员身份运行；Linux：<code>sudo ./install-linux.sh</code>。</li>
+        <li>安装完成后，在 Ops Hub 管理页或 MCPHub 工具里刷新客户端列表。</li>
+      </ol>
+      <div class="warn">
+        安装包里的 <code>config.json</code> 含注册令牌，等同于把该机器接入 Hub 的凭据。只发给授权设备，不要公开分享。
+      </div>
+    </section>
+
+    <div class="foot">
+      只允许在你拥有或获得明确书面授权的设备上安装 · 禁止未授权访问/监视/恶意使用
+    </div>
+  </div>
+</body>
+</html>
