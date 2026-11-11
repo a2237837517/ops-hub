@@ -26,8 +26,9 @@ Only three public paths are exposed:
 | `/agent` | Ops Hub | Agent WebSocket |
 | `/downloads/` | Ops Hub | Agent packages + static download page |
 | `/mcp` | MCPHub | MCP clients / AI |
+| `/ops/` | Ops Hub | Admin UI (login required) |
 
-The Ops Hub admin UI, `/api`, and `/mcp` are **not** exposed publicly.
+The Ops Hub admin UI is available at `https://mcp.example.com/ops/` (login with `adminToken`). Its `/api` is reachable only through the `/ops/` prefix; the raw `/api` and `/mcp` paths are not exposed.
 
 ## 1. Deploy the Hub on a private host
 
@@ -111,6 +112,7 @@ existing `location /`:
 
 - [../deploy/nginx/mcp-agent-location.conf](../deploy/nginx/mcp-agent-location.conf)
 - [../deploy/nginx/mcp-downloads-location.conf](../deploy/nginx/mcp-downloads-location.conf)
+- [../deploy/nginx/mcp-ops-ui-location.conf](../deploy/nginx/mcp-ops-ui-location.conf)
 
 Or copy the blocks from those files. The result:
 
@@ -204,6 +206,9 @@ No inbound port or public IP is needed on the managed machine.
 ```bash
 # Hub health from a private host
 curl http://10.0.0.20:7100/health
+
+# Admin UI (login required)
+curl -I https://mcp.example.com/ops/
 
 # Public download page
 curl -I https://mcp.example.com/downloads/

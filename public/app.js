@@ -188,7 +188,7 @@
 
   async function downloadAgentConfig(os) {
     try {
-      const response = await fetch(`/api/agent-config?os=${encodeURIComponent(os)}`, {
+      const response = await fetch(apiUrl(`api/agent-config?os=${encodeURIComponent(os)}`), {
         headers: { Authorization: `Bearer ${state.token}` },
       });
       if (response.status === 401) {
@@ -205,6 +205,10 @@
     }
   }
 
+  function apiUrl(path) {
+    return new URL(String(path).replace(/^\/+/, ''), document.baseURI).toString();
+  }
+
   async function api(path, options = {}) {
     const headers = {
       Authorization: `Bearer ${state.token}`,
@@ -213,7 +217,7 @@
     if (options.body && !(options.body instanceof Blob) && !(options.body instanceof FormData)) {
       headers['Content-Type'] = 'application/json';
     }
-    const response = await fetch(path, { ...options, headers });
+    const response = await fetch(apiUrl(path), { ...options, headers });
     if (response.status === 401) {
       showLogin('Token 无效或已过期');
       throw new Error('unauthorized');
@@ -1073,7 +1077,7 @@
     setFileStatus(`下载中: ${path}`, '');
     try {
       const response = await fetch(
-        `/api/clients/${encodeURIComponent(state.selected.id)}/files/download?path=${encodeURIComponent(path)}`,
+        apiUrl(`api/clients/${encodeURIComponent(state.selected.id)}/files/download?path=${encodeURIComponent(path)}`),
         { headers: { Authorization: `Bearer ${state.token}` } },
       );
       if (response.status === 401) {
@@ -1159,7 +1163,7 @@
       const xhr = new XMLHttpRequest();
       xhr.open(
         'POST',
-        `/api/clients/${encodeURIComponent(state.selected.id)}/files/upload?path=${encodeURIComponent(targetPath)}&overwrite=1`,
+        apiUrl(`api/clients/${encodeURIComponent(state.selected.id)}/files/upload?path=${encodeURIComponent(targetPath)}&overwrite=1`),
       );
       xhr.setRequestHeader('Authorization', `Bearer ${state.token}`);
       xhr.upload.onprogress = (event) => {

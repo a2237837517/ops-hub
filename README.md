@@ -330,6 +330,8 @@ If the gateway runs in a container and cannot reach the host loopback, use the h
 
 MCP clients then connect to the gateway (for example `https://mcp.example.com/mcp?key=<gateway-api-key>`), not directly to the hub's `mcpToken`.
 
+In MCPHub mode the admin UI can be mounted at `https://mcp.example.com/ops/` using [deploy/nginx/mcp-ops-ui-location.conf](deploy/nginx/mcp-ops-ui-location.conf); it still requires `adminToken` to log in.
+
 Optional per-user audit: declare an upstream credential slot so every gateway user binds their own hub token:
 
 ```json
