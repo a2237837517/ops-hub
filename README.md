@@ -171,6 +171,18 @@ If the download page says no packages are available, build them first:
 The script writes packages to `dist/packages/` and copies them to
 `public/downloads/` for the Hub UI.
 
+### Web terminal shortcuts
+
+The admin UI terminal works like a shell prompt:
+
+- `Enter` executes the current command
+- `↑` / `↓` browse command history (stored per client in the browser)
+- `Ctrl+L` clears the screen
+- `Ctrl+C` cancels the running job (when no text is selected)
+- `help` prints the built-in shortcut help
+
+Click anywhere in the terminal panel to focus the prompt.
+
 CLI:
 
 ```bash

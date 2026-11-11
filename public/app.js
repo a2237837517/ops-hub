@@ -7,6 +7,10 @@
     currentJob: null,
     jobOffset: 0,
     jobPollTimer: null,
+    cmdHistory: [],
+    historyIndex: -1,
+    historyDraft: '',
+    terminalBusy: false,
     filePath: '',
     selectedFile: null,
     tailCursor: null,
@@ -221,10 +225,15 @@
     state.view = 'client';
     state.currentJob = null;
     state.jobOffset = 0;
-    clearInterval(state.jobPollTimer);
+    state.terminalBusy = false;
+    clearTimeout(state.jobPollTimer);
     terminalOutput.textContent = '';
     $('job-info').textContent = '';
     $('cancel-btn').disabled = true;
+    $('cwd-input').value = '';
+    loadCommandHistory();
+    updateTerminalPrompt();
+    setTerminalStatus('就绪');
     $('downloads-view').classList.add('hidden');
     $('empty').classList.add('hidden');
     $('client-view').classList.remove('hidden');
@@ -246,6 +255,7 @@
     state.filePath = $('file-path').value;
     renderClients();
     await Promise.all([loadJobs(), loadAudit()]);
+    setTimeout(focusTerminal, 50);
   }
 
   function isWindows(client) {
@@ -299,13 +309,145 @@
   }
 
   // terminal
+  function historyKey() {
+    return `ops-hub-history:${state.selected?.id || 'default'}`;
+  }
+
+  function loadCommandHistory() {
+    try {
+      const raw = localStorage.getItem(historyKey());
+      state.cmdHistory = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(state.cmdHistory)) state.cmdHistory = [];
+    } catch {
+      state.cmdHistory = [];
+    }
+    state.historyIndex = -1;
+    state.historyDraft = '';
+  }
+
+  function saveCommandHistory() {
+    try {
+      localStorage.setItem(historyKey(), JSON.stringify(state.cmdHistory.slice(-200)));
+    } catch {
+      // ignore quota errors
+    }
+  }
+
+  function terminalPromptText() {
+    if (!state.selected) return '$';
+    const name = state.selected.name || state.selected.hostname || state.selected.id;
+    const cwd = $('cwd-input').value.trim() || (isWindows(state.selected) ? 'C:\\' : '~');
+    if (isWindows(state.selected)) {
+      return $('shell-select').value === 'powershell' ? `PS ${cwd}>` : `${cwd}>`;
+    }
+    return `${name}:${cwd}$`;
+  }
+
+  function updateTerminalPrompt() {
+    $('terminal-prompt').textContent = terminalPromptText();
+  }
+
+  function appendTerminal(text) {
+    if (!text) return;
+    terminalOutput.textContent += text;
+    terminalOutput.scrollTop = terminalOutput.scrollHeight;
+  }
+
+  function setTerminalStatus(text, kind = '') {
+    const el = $('terminal-status');
+    el.textContent = text;
+    el.className = `terminal-status ${kind}`.trim();
+  }
+
+  function focusTerminal() {
+    if (state.selected) $('command-input').focus();
+  }
+
+  function clearTerminal() {
+    terminalOutput.textContent = '';
+    if (!state.terminalBusy) {
+      $('job-info').textContent = '';
+      setTerminalStatus('就绪');
+      $('cancel-btn').disabled = true;
+    }
+    focusTerminal();
+  }
+
+  function navigateHistory(direction) {
+    if (!state.cmdHistory.length) return;
+    if (state.historyIndex === -1 && direction < 0) {
+      state.historyDraft = $('command-input').value;
+    }
+    if (direction < 0) {
+      state.historyIndex = Math.min(state.historyIndex + 1, state.cmdHistory.length - 1);
+    } else {
+      state.historyIndex = Math.max(state.historyIndex - 1, -1);
+    }
+    const input = $('command-input');
+    if (state.historyIndex === -1) {
+      input.value = state.historyDraft;
+    } else {
+      input.value = state.cmdHistory[state.cmdHistory.length - 1 - state.historyIndex] || '';
+    }
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+
+  async function cancelCurrentJob() {
+    if (!state.currentJob) return;
+    try {
+      await api(`/api/jobs/${encodeURIComponent(state.currentJob.id)}/cancel`, { method: 'POST' });
+      appendTerminal('\n^C\n');
+      setTerminalStatus('cancelled', 'error');
+      $('job-info').textContent = `job=${state.currentJob.id} status=cancelled`;
+    } catch (error) {
+      appendTerminal(`\nERROR: ${error.message}\n`);
+    }
+  }
+
   async function runCommand() {
     if (!state.selected) return;
-    const command = $('command-input').value.trim();
+    const input = $('command-input');
+    const command = input.value.trim();
     if (!command) return;
-    terminalOutput.textContent = '';
+
+    if (command === 'clear' || command === 'cls') {
+      clearTerminal();
+      input.value = '';
+      return;
+    }
+    if (command === 'help') {
+      appendTerminal(
+        '\n可用快捷操作：\n' +
+          '  clear / cls   清屏\n' +
+          '  help          显示帮助\n' +
+          '  ↑ / ↓         翻阅命令历史\n' +
+          '  Ctrl+L        清屏\n' +
+          '  Ctrl+C        终止当前任务\n',
+      );
+      input.value = '';
+      return;
+    }
+    if (state.terminalBusy) {
+      appendTerminal('\n[busy] 当前任务还没结束，Ctrl+C 可终止，或等它完成。\n');
+      return;
+    }
+
+    const prompt = terminalPromptText();
+    appendTerminal(`\n${prompt} ${command}\n`);
+    input.value = '';
+    state.historyIndex = -1;
+    state.historyDraft = '';
+    if (state.cmdHistory[state.cmdHistory.length - 1] !== command) {
+      state.cmdHistory.push(command);
+      saveCommandHistory();
+    }
+
     state.jobOffset = 0;
+    state.terminalBusy = true;
+    setTerminalStatus('running', 'running');
     $('job-info').textContent = 'starting...';
+    $('cancel-btn').disabled = false;
+
     try {
       const data = await api(`/api/clients/${encodeURIComponent(state.selected.id)}/exec`, {
         method: 'POST',
@@ -317,12 +459,14 @@
         }),
       });
       state.currentJob = data.job;
-      $('cancel-btn').disabled = false;
-      $('command-input').value = '';
       pollJob();
     } catch (error) {
-      terminalOutput.textContent = `ERROR: ${error.message}`;
+      appendTerminal(`ERROR: ${error.message}\n`);
+      state.terminalBusy = false;
+      setTerminalStatus('error', 'error');
       $('job-info').textContent = '';
+      $('cancel-btn').disabled = true;
+      focusTerminal();
     }
   }
 
@@ -334,37 +478,72 @@
       const data = await api(
         `/api/jobs/${encodeURIComponent(job.id)}/output?offset=${state.jobOffset}&maxBytes=65536`,
       );
-      if (data.text) {
-        terminalOutput.textContent += data.text;
-        terminalOutput.scrollTop = terminalOutput.scrollHeight;
-      }
+      if (data.text) appendTerminal(data.text);
       state.jobOffset = data.nextOffset;
       state.currentJob = data.job;
       $('job-info').textContent = `job=${job.id} status=${data.job.status} exit=${data.job.exitCode ?? '-'} bytes=${data.size}`;
       if (['exited', 'failed', 'cancelled', 'interrupted', 'lost'].includes(data.job.status)) {
+        state.terminalBusy = false;
         $('cancel-btn').disabled = true;
+        setTerminalStatus(
+          data.job.status === 'exited' ? 'done' : data.job.status,
+          data.job.status === 'exited' ? 'done' : 'error',
+        );
         await loadJobs();
+        focusTerminal();
         return;
       }
-      state.jobPollTimer = setTimeout(pollJob, 800);
+      setTerminalStatus('running', 'running');
+      state.jobPollTimer = setTimeout(pollJob, 600);
     } catch (error) {
       $('job-info').textContent = `poll error: ${error.message}`;
+      setTerminalStatus('poll error', 'error');
       state.jobPollTimer = setTimeout(pollJob, 2000);
     }
   }
 
   $('run-btn').addEventListener('click', runCommand);
-  $('command-input').addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') runCommand();
+  $('clear-terminal-btn').addEventListener('click', clearTerminal);
+  $('cancel-btn').addEventListener('click', cancelCurrentJob);
+  $('terminal-shell').addEventListener('click', (event) => {
+    if (event.target.closest('button, select, input')) return;
+    focusTerminal();
   });
-  $('cancel-btn').addEventListener('click', async () => {
-    if (!state.currentJob) return;
-    try {
-      await api(`/api/jobs/${encodeURIComponent(state.currentJob.id)}/cancel`, { method: 'POST' });
-    } catch (error) {
-      alert(error.message);
+
+  $('command-input').addEventListener('keydown', (event) => {
+    const input = event.currentTarget;
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      runCommand();
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      navigateHistory(-1);
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      navigateHistory(1);
+      return;
+    }
+    if (event.ctrlKey && event.key.toLowerCase() === 'l') {
+      event.preventDefault();
+      clearTerminal();
+      return;
+    }
+    if (event.ctrlKey && event.key.toLowerCase() === 'c') {
+      // 有选中文本时保留浏览器复制行为
+      if (input.selectionStart !== input.selectionEnd) return;
+      if (state.currentJob && state.terminalBusy) {
+        event.preventDefault();
+        cancelCurrentJob();
+      }
     }
   });
+
+  $('shell-select').addEventListener('change', updateTerminalPrompt);
+  $('cwd-input').addEventListener('input', updateTerminalPrompt);
 
   // files
   function joinRemote(dir, name) {

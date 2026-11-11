@@ -124,24 +124,42 @@
           </nav>
 
           <section id="tab-terminal" class="tab-panel">
-            <div class="terminal-controls">
-              <select id="shell-select">
-                <option value="">自动</option>
-                <option value="cmd">cmd</option>
-                <option value="powershell">powershell</option>
-                <option value="bash">bash</option>
-                <option value="sh">sh</option>
-              </select>
-              <input id="cwd-input" placeholder="工作目录（可选）" />
-              <label class="check"><input id="approve-dangerous" type="checkbox" /> 允许高危</label>
+            <div class="terminal-toolbar">
+              <div class="terminal-toolbar-left">
+                <select id="shell-select" title="Shell">
+                  <option value="">自动</option>
+                  <option value="cmd">cmd</option>
+                  <option value="powershell">powershell</option>
+                  <option value="bash">bash</option>
+                  <option value="sh">sh</option>
+                </select>
+                <input id="cwd-input" placeholder="工作目录（可选）" />
+                <label class="check"><input id="approve-dangerous" type="checkbox" /> 允许高危</label>
+              </div>
+              <div class="terminal-toolbar-right">
+                <span id="terminal-status" class="terminal-status">就绪</span>
+                <button id="clear-terminal-btn" class="ghost">清屏</button>
+                <button id="cancel-btn" class="danger" disabled>终止</button>
+              </div>
             </div>
-            <div class="command-row">
-              <input id="command-input" placeholder="输入命令，回车执行" autocomplete="off" />
-              <button id="run-btn">执行</button>
-              <button id="cancel-btn" class="danger" disabled>终止</button>
+
+            <div id="terminal-shell" class="terminal-shell">
+              <pre id="terminal-output" class="terminal-output"></pre>
+              <div class="terminal-prompt-row">
+                <span id="terminal-prompt" class="terminal-prompt">$</span>
+                <input
+                  id="command-input"
+                  class="terminal-input"
+                  placeholder="输入命令，回车执行；↑↓ 历史；Ctrl+L 清屏；Ctrl+C 终止"
+                  autocomplete="off"
+                  autocapitalize="off"
+                  spellcheck="false"
+                />
+                <button id="run-btn" class="terminal-run" title="执行（Enter）">↵</button>
+              </div>
+              <div id="job-info" class="terminal-job-info"></div>
             </div>
-            <pre id="terminal-output" class="terminal-output"></pre>
-            <div id="job-info" class="muted"></div>
+            <div class="terminal-hint muted">Enter 执行 · ↑/↓ 命令历史 · Ctrl+L 清屏 · Ctrl+C 终止当前任务</div>
           </section>
 
           <section id="tab-files" class="tab-panel hidden">
