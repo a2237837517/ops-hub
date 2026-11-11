@@ -156,15 +156,18 @@ In the MCPHub dashboard, open the `ops-hub` server and call:
 ```json
 {
   "name": "ops_agent_package",
-  "arguments": {
-    "os": "windows",
-    "arch": "amd64",
-    "name": "customerA-app01"
-  }
+  "arguments": {}
 }
 ```
 
-The tool returns a 24-hour private URL such as:
+With no arguments it generates all supported Windows/Linux architectures using the same
+`enrollmentToken`, and returns a 24-hour private URL for each package. To limit it:
+
+```json
+{"os":"windows","arch":"amd64","name":"customerA-app01"}
+```
+
+The tool returns URLs such as:
 
 ```text
 https://mcp.example.com/downloads/private/<random>/ops-agent-windows-amd64-configured.zip

@@ -612,18 +612,53 @@ function createMcpServer({ config, gateway, jobs, files, store, logger }) {
     {
       title: '生成已配置的客户端安装包',
       description:
-        '生成一个带 config.json（server + enrollmentToken）的 Windows/Linux Agent 安装包，并返回 24 小时有效的私有下载链接。链接等同于接入凭据，只发给授权设备。',
+        '生成带 config.json（server + enrollmentToken）的 Windows/Linux Agent 安装包，返回 24 小时有效的私有下载链接。默认 os=auto、arch=auto，会一次生成全平台，不需要手填参数；所有包共用同一个 enrollmentToken。链接等同于接入凭据，只发给授权设备。',
       inputSchema: {
-        os: z.enum(['windows', 'linux']).describe('目标系统'),
-        arch: z.enum(['amd64', '386', 'arm64']).describe('目标架构；Windows 支持 amd64/386，Linux 支持 amd64/arm64/386'),
+        os: z
+          .enum(['auto', 'windows', 'linux'])
+          .optional()
+          .default('auto')
+          .describe('目标系统；默认 auto=一次生成全平台'),
+        arch: z
+          .enum(['auto', 'amd64', '386', 'arm64'])
+          .optional()
+          .default('auto')
+          .describe('目标架构；默认 auto=生成该系统的全部架构'),
         name: z.string().optional().describe('写入 config.json 的客户端名称'),
         tags: z.array(z.string()).optional().describe('写入 config.json 的标签'),
       },
     },
     async ({ os, arch, name, tags }) => {
       try {
-        const pkg = await createAgentPackage(config, { os, arch, name, tags });
-        return textResult(pkg);
+        const allTargets = [
+          { os: 'windows', arch: 'amd64' },
+          { os: 'windows', arch: '386' },
+          { os: 'linux', arch: 'amd64' },
+          { os: 'linux', arch: 'arm64' },
+          { os: 'linux', arch: '386' },
+        ];
+        let targets;
+        if (os === 'auto' || arch === 'auto') {
+          targets = allTargets.filter((item) => {
+            if (os !== 'auto' && item.os !== os) return false;
+            if (arch !== 'auto' && item.arch !== arch) return false;
+            return true;
+          });
+        } else {
+          targets = [{ os, arch }];
+        }
+        if (!targets.length) throw new Error('没有匹配的系统/架构组合');
+        const packages = [];
+        for (const target of targets) {
+          packages.push(await createAgentPackage(config, { ...target, name, tags }));
+        }
+        return textResult({
+          mode: targets.length > 1 ? 'all-platforms' : 'single',
+          count: packages.length,
+          packages,
+          note:
+            '所有安装包使用同一个 enrollmentToken（一个 key 通用）。链接 24 小时有效，含注册令牌，请勿公开转发。',
+        });
       } catch (error) {
         return errorResult(error);
       }
