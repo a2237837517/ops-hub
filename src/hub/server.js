@@ -49,6 +49,32 @@ export async function startHub(config) {
 
   const downloadsDir = path.join(PROJECT_ROOT, 'public', 'downloads');
 
+  const extractPrimaryIp = (agent) => {
+    const interfaces = agent?.info?.network;
+    if (Array.isArray(interfaces)) {
+      for (const iface of interfaces) {
+        for (const addr of iface.addrs || []) {
+          const value = String(addr).split('/')[0];
+          if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value) && !value.startsWith('127.')) {
+            return value;
+          }
+        }
+      }
+    }
+    return String(agent?.remoteAddress || '').replace(/^::ffff:/, '');
+  };
+
+  const withDisplay = (agent, includeInfo = true) => {
+    const { info, tokenHash, ...rest } = agent;
+    return {
+      ...rest,
+      ...(includeInfo ? { info: info || {} } : {}),
+      name: agent.displayName || agent.name,
+      displayName: agent.displayName || '',
+      primaryIp: extractPrimaryIp(agent),
+    };
+  };
+
   const asyncHandler = (fn) => (req, res, next) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
@@ -127,7 +153,7 @@ export async function startHub(config) {
   app.get('/api/clients', (req, res) => {
     const clients = store
       .listAgents({ tag: req.query.tag, status: req.query.status, query: req.query.query })
-      .map(({ info, tokenHash, ...agent }) => agent);
+      .map((agent) => withDisplay(agent, false));
     res.json({ success: true, count: clients.length, clients });
   });
 
@@ -143,8 +169,18 @@ export async function startHub(config) {
       }
     }
     const fresh = store.getAgent(agent.id);
-    res.json({ success: true, client: { ...fresh, tokenHash: undefined } });
+    res.json({ success: true, client: withDisplay(fresh) });
   }));
+
+  app.patch('/api/clients/:id', (req, res) => {
+    const agent = store.findAgent(req.params.id);
+    if (!agent) return res.status(404).json({ success: false, message: 'client not found' });
+    const name = String(req.body?.name || '').trim().slice(0, 120);
+    if (!name) return res.status(400).json({ success: false, message: 'name is required' });
+    store.updateAgent(agent.id, { displayName: name });
+    store.audit('agent.rename', { clientId: agent.id, name, previous: agent.displayName || agent.name });
+    res.json({ success: true, client: withDisplay(store.getAgent(agent.id)) });
+  });
 
   app.delete('/api/clients/:id', (req, res) => {
     const agent = store.findAgent(req.params.id);

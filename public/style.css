@@ -328,3 +328,48 @@ td.command { max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
   text-overflow: ellipsis;
 }
 .terminal-hint { margin-top: 8px; font-size: 12px; }
+
+/* Client info cards */
+.client-title-row { display: flex; align-items: center; gap: 8px; }
+.icon-btn {
+  padding: 3px 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.2;
+}
+.icon-btn:hover { color: var(--accent); border-color: var(--accent); }
+.client-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.info-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 12px 14px;
+  min-width: 0;
+}
+.info-card h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.info-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  padding: 2px 0;
+}
+.info-line .k { color: var(--muted); white-space: nowrap; }
+.info-line .v { text-align: right; overflow-wrap: anywhere; }
+.info-net-ip { color: var(--accent); font-family: "JetBrains Mono", Consolas, monospace; }
+.info-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.info-tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: #12293a; color: #9cd7ff; }

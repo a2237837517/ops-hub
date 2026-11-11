@@ -208,14 +208,135 @@
       .map(
         (client) => `
         <div class="client-item ${state.selected?.id === client.id ? 'active' : ''}" data-id="${escapeHtml(client.id)}">
-          <div class="name"><span class="dot ${client.status}"></span>${escapeHtml(client.name || client.hostname || client.id)}</div>
-          <div class="meta">${escapeHtml(client.os || '')} ${escapeHtml(client.arch || '')} · ${escapeHtml(client.status)}</div>
+          <div class="name"><span class="dot ${client.status}"></span>${escapeHtml(client.displayName || client.name || client.hostname || client.id)}</div>
+          <div class="meta">${client.primaryIp ? `IP ${escapeHtml(client.primaryIp)} · ` : ''}${escapeHtml(client.os || '')} ${escapeHtml(client.arch || '')} · ${escapeHtml(client.status)}</div>
           <div class="meta">${escapeHtml(client.id)}</div>
         </div>`,
       )
       .join('');
     for (const item of clientList.querySelectorAll('.client-item')) {
       item.addEventListener('click', () => selectClient(item.dataset.id));
+    }
+  }
+
+  function formatUptime(seconds) {
+    const s = Number(seconds) || 0;
+    const d = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    if (d > 0) return `${d}天 ${h}小时`;
+    if (h > 0) return `${h}小时 ${m}分`;
+    return `${m}分`;
+  }
+
+  function collectClientIps(client) {
+    const result = [];
+    const seen = new Set();
+    const push = (ip, label) => {
+      const value = String(ip || '').split('/')[0].replace(/^::ffff:/, '');
+      if (!value || seen.has(value)) return;
+      seen.add(value);
+      result.push({ ip: value, label: label || '' });
+    };
+    if (client.primaryIp) push(client.primaryIp, '主 IP');
+    if (client.remoteAddress) push(client.remoteAddress, '连接 IP');
+    const interfaces = client.info?.network;
+    if (Array.isArray(interfaces)) {
+      for (const iface of interfaces) {
+        for (const addr of iface.addrs || []) push(addr, iface.name || '网卡');
+      }
+    }
+    return result;
+  }
+
+  function renderClientInfo() {
+    const client = state.selected;
+    if (!client) {
+      $('client-info').innerHTML = '';
+      return;
+    }
+    const info = client.info || {};
+    const memory = info.memory || {};
+    const cpu = info.cpu || {};
+    const disks = Array.isArray(info.disks) ? info.disks : [];
+    const ips = collectClientIps(client);
+    const tags = Array.isArray(client.tags) ? client.tags : [];
+
+    const card = (title, lines) => `
+      <div class="info-card">
+        <h4>${escapeHtml(title)}</h4>
+        ${lines.map((line) => `<div class="info-line"><span class="k">${escapeHtml(line.k)}</span><span class="v ${line.cls || ''}">${escapeHtml(line.v)}</span></div>`).join('')}
+      </div>`;
+
+    const systemLines = [
+      { k: '主机名', v: info.hostname || client.hostname || '-' },
+      { k: '系统', v: [info.os, info.platform, info.platformVersion].filter(Boolean).join(' ') || client.os || '-' },
+      { k: '内核', v: [info.kernelVersion, info.kernelArch].filter(Boolean).join(' ') || client.arch || '-' },
+      { k: '运行时间', v: info.uptimeSec ? formatUptime(info.uptimeSec) : '-' },
+      { k: 'Agent', v: info.agentVersion || client.version || '-' },
+      { k: '客户端 ID', v: client.id },
+    ];
+    const networkLines = [
+      { k: '连接地址', v: client.remoteAddress || '-' },
+      ...ips.slice(0, 8).map((item) => ({ k: item.label || 'IP', v: item.ip, cls: 'info-net-ip' })),
+    ];
+    if (!networkLines.length) networkLines.push({ k: 'IP', v: '未采集' });
+    const cpuLines = [
+      { k: 'CPU', v: cpu.model || '-' },
+      { k: '核心', v: cpu.logical ? `${cpu.cores || '?'} 物理 / ${cpu.logical} 逻辑` : '-' },
+      { k: '负载', v: info.load ? `${info.load.load1 ?? '-'} / ${info.load.load5 ?? '-'} / ${info.load.load15 ?? '-'}` : '-' },
+      { k: '内存', v: memory.total ? `${formatBytes(memory.used || 0)} / ${formatBytes(memory.total)} (${Number(memory.percent || 0).toFixed(1)}%)` : '-' },
+    ];
+    const diskLines = disks.slice(0, 6).map((disk) => ({
+      k: disk.mountpoint || disk.device || '磁盘',
+      v: `${formatBytes(disk.free || 0)} 可用 / ${formatBytes(disk.total || 0)}`,
+    }));
+    if (!diskLines.length) diskLines.push({ k: '磁盘', v: '未采集' });
+
+    $('client-info').innerHTML = [
+      card('系统信息', systemLines),
+      card('网络 / IP', networkLines),
+      card('CPU / 内存', cpuLines),
+      card('磁盘', diskLines),
+    ].join('') + (tags.length
+      ? `<div class="info-card"><h4>标签</h4><div class="info-tags">${tags.map((tag) => `<span class="info-tag">${escapeHtml(tag)}</span>`).join('')}</div></div>`
+      : '');
+  }
+
+  async function refreshClientInfo() {
+    if (!state.selected) return;
+    const data = await api(`/api/clients/${encodeURIComponent(state.selected.id)}?refresh=1`);
+    state.selected = data.client;
+    $('client-name').textContent = state.selected.displayName || state.selected.name || state.selected.hostname || state.selected.id;
+    $('client-meta').textContent = [
+      state.selected.id,
+      state.selected.os,
+      state.selected.arch,
+      state.selected.primaryIp,
+      state.selected.info?.hostname ? `host=${state.selected.info.hostname}` : '',
+      state.selected.info?.uptimeSec ? `uptime=${Math.floor(state.selected.info.uptimeSec / 3600)}h` : '',
+    ].filter(Boolean).join(' · ');
+    renderClientInfo();
+    renderClients();
+  }
+
+  async function renameClient() {
+    if (!state.selected) return;
+    const current = state.selected.displayName || state.selected.name || state.selected.hostname || state.selected.id;
+    const name = prompt('输入新的客户端名称（仅修改 Hub 显示名，不改 Agent 主机名）', current);
+    if (!name || name.trim() === current) return;
+    try {
+      const data = await api(`/api/clients/${encodeURIComponent(state.selected.id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name: name.trim() }),
+      });
+      state.selected = data.client;
+      $('client-name').textContent = state.selected.displayName || state.selected.name || state.selected.id;
+      await loadClients();
+      renderClientInfo();
+      renderClients();
+    } catch (error) {
+      alert(`重命名失败: ${error.message}`);
     }
   }
 
@@ -237,13 +358,13 @@
     $('downloads-view').classList.add('hidden');
     $('empty').classList.add('hidden');
     $('client-view').classList.remove('hidden');
-    $('client-name').textContent = state.selected.name || state.selected.hostname || state.selected.id;
+    $('client-name').textContent = state.selected.displayName || state.selected.name || state.selected.hostname || state.selected.id;
     const info = state.selected.info || {};
     const parts = [
       state.selected.id,
       state.selected.os,
       state.selected.arch,
-      state.selected.remoteAddress,
+      state.selected.primaryIp,
       info.hostname ? `host=${info.hostname}` : '',
       info.uptimeSec ? `uptime=${Math.floor(info.uptimeSec / 3600)}h` : '',
     ].filter(Boolean);
@@ -251,6 +372,7 @@
     const badge = $('client-badge');
     badge.textContent = state.selected.status;
     badge.className = `badge ${state.selected.status}`;
+    renderClientInfo();
     $('file-path').value = isWindows(state.selected) ? 'C:\\' : '/';
     state.filePath = $('file-path').value;
     renderClients();
@@ -280,7 +402,8 @@
       }
     });
   }
-  $('refresh-client-btn').addEventListener('click', () => state.selected && selectClient(state.selected.id));
+  $('refresh-client-btn').addEventListener('click', () => refreshClientInfo().catch((e) => alert(e.message)));
+  $('rename-client-btn').addEventListener('click', () => renameClient());
   $('delete-client-btn').addEventListener('click', async () => {
     if (!state.selected) return;
     const name = state.selected.name || state.selected.id;
@@ -553,28 +676,75 @@
     return dir.endsWith('/') || dir.endsWith('\\') ? dir + name : dir + sep + name;
   }
 
+  function parentRemotePath(raw, windows) {
+    if (!raw) return null;
+    if (windows) {
+      let p = String(raw).replace(/\//g, '\\').replace(/\\+$/, '');
+      if (/^[A-Za-z]:$/.test(p)) return null;
+      if (/^[A-Za-z]:\\/.test(p)) {
+        const idx = p.lastIndexOf('\\');
+        if (idx <= 2) return p.slice(0, 2) + '\\';
+        return p.slice(0, idx);
+      }
+      if (p.startsWith('\\\\')) {
+        const parts = p.replace(/^\\\\/, '').split('\\').filter(Boolean);
+        if (parts.length <= 2) return null;
+        parts.pop();
+        return '\\\\' + parts.join('\\');
+      }
+      return null;
+    }
+    let p = String(raw).replace(/\/+$/, '');
+    if (!p || p === '/') return null;
+    const idx = p.lastIndexOf('/');
+    if (idx <= 0) return '/';
+    return p.slice(0, idx);
+  }
+
+  function currentRemotePath() {
+    return $('file-path').value.trim() || (isWindows(state.selected) ? 'C:\\' : '/');
+  }
+
+  function navigateUp() {
+    if (!state.selected) return;
+    const parent = parentRemotePath(currentRemotePath(), isWindows(state.selected));
+    if (!parent) return;
+    $('file-path').value = parent;
+    listFiles().catch((e) => alert(e.message));
+  }
+
   async function listFiles() {
     if (!state.selected) return;
-    const path = $('file-path').value.trim() || (isWindows(state.selected) ? 'C:\\' : '/');
+    const path = currentRemotePath();
     state.filePath = path;
     const data = await api(
       `/api/clients/${encodeURIComponent(state.selected.id)}/files?path=${encodeURIComponent(path)}&pattern=${encodeURIComponent($('file-pattern').value.trim())}`,
     );
     const entries = data.entries || [];
-    fileList.innerHTML = entries.length
-      ? entries
-          .map(
-            (entry) => `
-          <div class="file-row ${entry.dir ? 'dir' : ''}" data-path="${escapeHtml(entry.path)}" data-dir="${entry.dir ? '1' : '0'}">
-            <span>${entry.dir ? '📁' : '📄'} ${escapeHtml(entry.name)}</span>
-            <span class="size">${entry.dir ? '' : formatBytes(entry.size)} ${escapeHtml(entry.modTime || '')}</span>
-          </div>`,
-          )
-          .join('')
-      : '<div class="muted" style="padding:12px">空目录</div>';
+    const parent = parentRemotePath(path, isWindows(state.selected));
+    $('file-up-btn').disabled = !parent;
+    const rows = [];
+    if (parent) {
+      rows.push(
+        '<div class="file-row dir file-up-row" data-up="1"><span>⬆️ 上一级</span><span class="size">..</span></div>',
+      );
+    }
+    for (const entry of entries) {
+      rows.push(`
+        <div class="file-row ${entry.dir ? 'dir' : ''}" data-path="${escapeHtml(entry.path)}" data-dir="${entry.dir ? '1' : '0'}">
+          <span>${entry.dir ? '📁' : '📄'} ${escapeHtml(entry.name)}</span>
+          <span class="size">${entry.dir ? '' : formatBytes(entry.size)} ${escapeHtml(entry.modTime || '')}</span>
+        </div>`);
+    }
+    if (!entries.length && !parent) {
+      rows.push('<div class="muted" style="padding:12px">空目录</div>');
+    }
+    fileList.innerHTML = rows.join('');
     for (const row of fileList.querySelectorAll('.file-row')) {
       row.addEventListener('click', () => {
-        if (row.dataset.dir === '1') {
+        if (row.dataset.up === '1') {
+          navigateUp();
+        } else if (row.dataset.dir === '1') {
           $('file-path').value = row.dataset.path;
           listFiles().catch((e) => alert(e.message));
         } else {
@@ -607,6 +777,16 @@
   }
 
   $('file-list-btn').addEventListener('click', () => listFiles().catch((e) => alert(e.message)));
+  $('file-up-btn').addEventListener('click', navigateUp);
+  $('file-path').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      listFiles().catch((e) => alert(e.message));
+    } else if (event.altKey && event.key === 'ArrowUp') {
+      event.preventDefault();
+      navigateUp();
+    }
+  });
   $('file-tail-btn').addEventListener('click', () => tailFile().catch((e) => alert(e.message)));
   $('file-download-btn').addEventListener('click', async () => {
     if (!state.selected || !state.selectedFile) return;

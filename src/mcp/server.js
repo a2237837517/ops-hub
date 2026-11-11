@@ -23,7 +23,7 @@ function errorResult(error) {
 function clientSummary(agent) {
   return {
     id: agent.id,
-    name: agent.name,
+    name: agent.displayName || agent.name,
     hostname: agent.hostname,
     os: agent.os,
     arch: agent.arch,

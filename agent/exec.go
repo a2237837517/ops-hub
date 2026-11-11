@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -98,12 +99,9 @@ func (a *Agent) startExec(msg Incoming) {
 	a.putJob(job)
 
 	cmd := buildCommand(msg)
-	cmd.Dir = msg.Cwd
+	cmd.Dir = resolveWorkingDir(msg.Cwd)
 	configureProcess(cmd)
-	cmd.Env = os.Environ()
-	for key, value := range msg.Env {
-		cmd.Env = append(cmd.Env, key+"="+value)
-	}
+	cmd.Env = buildEnv(msg.Env)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -210,7 +208,50 @@ func buildCommand(msg Incoming) *exec.Cmd {
 	if shell == "sh" {
 		return exec.Command("/bin/sh", "-c", msg.Command)
 	}
-	return exec.Command("/bin/bash", "-lc", msg.Command)
+	// 不用 -l：服务用户可能没有可读的 ~/.bash_profile，login shell 会产生
+	// “/root/.bash_profile: 权限不够”之类的噪音。需要登录环境时显式传 shell/cwd。
+	return exec.Command("/bin/bash", "-c", msg.Command)
+}
+
+func buildEnv(extra map[string]string) []string {
+	env := os.Environ()
+	if runtime.GOOS != "windows" {
+		if u, err := user.Current(); err == nil {
+			env = setEnv(env, "HOME", u.HomeDir)
+			env = setEnv(env, "USER", u.Username)
+			env = setEnv(env, "LOGNAME", u.Username)
+		}
+	}
+	for key, value := range extra {
+		env = setEnv(env, key, value)
+	}
+	return env
+}
+
+func setEnv(env []string, key, value string) []string {
+	prefix := key + "="
+	out := env[:0]
+	for _, item := range env {
+		if !strings.HasPrefix(item, prefix) {
+			out = append(out, item)
+		}
+	}
+	return append(out, prefix+value)
+}
+
+func resolveWorkingDir(cwd string) string {
+	if strings.TrimSpace(cwd) != "" {
+		return cwd
+	}
+	if u, err := user.Current(); err == nil && u.HomeDir != "" {
+		if stat, err := os.Stat(u.HomeDir); err == nil && stat.IsDir() {
+			return u.HomeDir
+		}
+	}
+	if runtime.GOOS == "windows" {
+		return `C:\`
+	}
+	return "/"
 }
 
 func (a *Agent) pump(job *Job, stream string, r io.Reader) {

@@ -69,6 +69,8 @@ GitHub topics are configured on the repository page. The project is designed to 
 - MCP server over **Streamable HTTP** (and legacy-compatible JSON-RPC behavior)
 - 15 MCP tools covering inventory, command execution, files, logs, and search
 - Web admin UI: clients, terminal, files, jobs, audit
+- Rename clients (Hub display name) and view OS/IP/CPU/memory/disk info
+- File browser with parent-directory navigation
 - JSON state persistence + JSONL audit log
 - Dangerous-command approval policy
 - Client revocation list

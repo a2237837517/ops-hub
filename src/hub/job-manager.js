@@ -79,7 +79,7 @@ export class JobManager {
     const job = {
       id: jobId,
       clientId,
-      clientName: agent.name || agent.hostname || clientId,
+      clientName: agent.displayName || agent.name || agent.hostname || clientId,
       command,
       shell: options.shell || '',
       cwd: options.cwd || '',

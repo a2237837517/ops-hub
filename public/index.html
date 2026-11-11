@@ -106,7 +106,10 @@
         <div id="client-view" class="hidden">
           <section class="client-head">
             <div>
-              <h2 id="client-name">-</h2>
+              <div class="client-title-row">
+                <h2 id="client-name">-</h2>
+                <button id="rename-client-btn" class="icon-btn" title="重命名客户端">✎</button>
+              </div>
               <div id="client-meta" class="muted">-</div>
             </div>
             <div class="client-head-actions">
@@ -115,6 +118,8 @@
               <button id="delete-client-btn" class="ghost danger">删除</button>
             </div>
           </section>
+
+          <section id="client-info" class="client-info-grid"></section>
 
           <nav class="tabs">
             <button data-tab="terminal" class="tab active">终端</button>
@@ -167,6 +172,7 @@
               <input id="file-path" placeholder="客户端路径，如 C:\ 或 /var/log" />
               <input id="file-pattern" placeholder="*.log（可选）" />
               <button id="file-list-btn">列出</button>
+              <button id="file-up-btn" class="ghost" title="返回上一级">↑ 上一级</button>
               <label class="upload-btn">上传<input id="file-upload" type="file" hidden /></label>
             </div>
             <div class="file-layout">
