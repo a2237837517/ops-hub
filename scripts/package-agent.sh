@@ -88,6 +88,14 @@ make_linux_pkg amd64
 make_linux_pkg arm64
 make_linux_pkg 386
 
+# 同时复制到 Hub 的静态下载目录，安装后可以直接从管理页面下载
+PUBLIC_DOWNLOADS="$ROOT/public/downloads"
+mkdir -p "$PUBLIC_DOWNLOADS"
+cp "$PKG_DIR"/*.zip "$PKG_DIR"/*.tar.gz "$PUBLIC_DOWNLOADS"/
+cp "$AGENT_DIR/config.example.json" "$PUBLIC_DOWNLOADS/config.example.json"
+
 echo
 echo "Agent 安装包:"
 ls -lh "$PKG_DIR"
+echo
+echo "管理页面下载目录: $PUBLIC_DOWNLOADS"

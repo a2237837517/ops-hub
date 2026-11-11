@@ -19,9 +19,10 @@
 
   <div id="app" class="app hidden">
     <header class="topbar">
-      <div class="brand">Ops Hub Ops Hub</div>
+      <div class="brand">Ops Hub</div>
       <div class="top-actions">
         <span id="hub-status" class="muted">连接中...</span>
+        <button id="downloads-btn" class="ghost">下载客户端</button>
         <button id="refresh-btn" class="ghost">刷新</button>
         <button id="logout-btn" class="ghost">退出</button>
       </div>
@@ -42,9 +43,65 @@
 
       <main class="main">
         <div id="empty" class="empty">
-          <h2>选择左侧客户端</h2>
-          <p>通过 MCP 或本页面执行命令、传文件、滚动查看日志。</p>
+          <h2>还没有客户端</h2>
+          <p>下载 Agent 安装包，装到 Windows 或 Linux 机器后会自动上线。</p>
+          <button id="empty-downloads-btn" class="primary-btn">下载客户端</button>
+          <p class="muted small-text">也可以从顶部「下载客户端」进入下载页。</p>
         </div>
+
+        <section id="downloads-view" class="downloads hidden">
+          <div class="downloads-head">
+            <div>
+              <h2>下载客户端</h2>
+              <p class="muted">选择目标系统下载安装包，然后按下面的步骤安装。安装包由本机 Hub 直接提供。</p>
+            </div>
+            <button id="close-downloads-btn" class="ghost">返回</button>
+          </div>
+
+          <div class="download-grid">
+            <div class="download-card">
+              <div class="download-card-title">🪟 Windows</div>
+              <p class="muted">Windows Server 2008 R2 / 2012 / 2016 / 2019 / 2022，Windows 10/11</p>
+              <div class="download-actions">
+                <a class="primary-btn" data-download="ops-agent-windows-amd64.zip" href="#">Windows x64</a>
+                <a class="ghost-btn" data-download="ops-agent-windows-386.zip" href="#">Windows x86</a>
+              </div>
+              <button class="link-btn" data-config="windows">下载 config.json（Windows）</button>
+            </div>
+
+            <div class="download-card">
+              <div class="download-card-title">🐧 Linux</div>
+              <p class="muted">主流 x86_64 / arm64 发行版（CentOS、Ubuntu、Debian、Rocky 等）</p>
+              <div class="download-actions">
+                <a class="primary-btn" data-download="ops-agent-linux-amd64.tar.gz" href="#">Linux x64</a>
+                <a class="ghost-btn" data-download="ops-agent-linux-arm64.tar.gz" href="#">Linux arm64</a>
+                <a class="ghost-btn" data-download="ops-agent-linux-386.tar.gz" href="#">Linux x86</a>
+              </div>
+              <button class="link-btn" data-config="linux">下载 config.json（Linux）</button>
+            </div>
+          </div>
+
+          <div class="download-steps">
+            <h3>安装步骤</h3>
+            <ol>
+              <li>下载对应系统的安装包，解压到目标机器。</li>
+              <li>点击「下载 config.json」，把 <code>server</code>、<code>enrollmentToken</code> 填好后放到安装包目录；或直接使用下载到的配置。</li>
+              <li>Windows：右键 <code>install.bat</code> → 以管理员身份运行；Linux：<code>sudo ./install-linux.sh</code>。</li>
+              <li>回到本页面刷新，客户端会出现在左侧列表。</li>
+            </ol>
+            <p class="muted small-text">
+              注意：安装包里的 <code>config.json</code> 含注册令牌，等同于把该机器接入本 Hub 的凭据，请只发给授权设备。
+            </p>
+          </div>
+
+          <div class="download-list-wrap">
+            <div class="download-list-head">
+              <span>本机可下载文件</span>
+              <button id="reload-downloads-btn" class="ghost">刷新列表</button>
+            </div>
+            <div id="download-list" class="download-list muted">加载中...</div>
+          </div>
+        </section>
 
         <div id="client-view" class="hidden">
           <section class="client-head">

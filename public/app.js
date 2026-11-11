@@ -3,6 +3,7 @@
     token: localStorage.getItem('ops-hub-token') || '',
     clients: [],
     selected: null,
+    view: 'clients',
     currentJob: null,
     jobOffset: 0,
     jobPollTimer: null,
@@ -38,6 +39,89 @@
   function showApp() {
     login.classList.add('hidden');
     app.classList.remove('hidden');
+  }
+
+  function showDownloads() {
+    state.view = 'downloads';
+    $('empty').classList.add('hidden');
+    $('client-view').classList.add('hidden');
+    $('downloads-view').classList.remove('hidden');
+    loadDownloads().catch((error) => {
+      $('download-list').textContent = `加载失败: ${error.message}`;
+    });
+  }
+
+  function showClientOrEmpty() {
+    state.view = state.selected ? 'client' : 'clients';
+    $('downloads-view').classList.add('hidden');
+    if (state.selected) {
+      $('client-view').classList.remove('hidden');
+      $('empty').classList.add('hidden');
+    } else {
+      $('client-view').classList.add('hidden');
+      $('empty').classList.remove('hidden');
+    }
+  }
+
+  function triggerDownload(url, filename) {
+    const link = document.createElement('a');
+    link.href = url;
+    if (filename) link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  async function loadDownloads() {
+    const data = await api('/api/downloads');
+    const files = new Map((data.files || []).map((file) => [file.name, file]));
+    for (const link of document.querySelectorAll('[data-download]')) {
+      const file = files.get(link.dataset.download);
+      if (file) {
+        link.href = file.url;
+        link.download = file.name;
+        link.classList.remove('disabled');
+        link.removeAttribute('aria-disabled');
+      } else {
+        link.href = '#';
+        link.classList.add('disabled');
+        link.setAttribute('aria-disabled', 'true');
+        link.title = '本机还没有生成这个安装包，请运行 scripts/package-agent.sh';
+      }
+    }
+    const list = $('download-list');
+    if (!data.files?.length) {
+      list.innerHTML = '<div class="muted" style="padding:10px 0">本机还没有安装包。在项目目录运行 <code>./scripts/package-agent.sh</code> 生成后刷新。</div>';
+      return;
+    }
+    list.innerHTML = data.files
+      .map(
+        (file) => `
+        <div class="file-row">
+          <span><a href="${file.url}" download="${escapeHtml(file.name)}">${escapeHtml(file.name)}</a></span>
+          <span class="size">${formatBytes(file.size)}</span>
+        </div>`,
+      )
+      .join('');
+  }
+
+  async function downloadAgentConfig(os) {
+    try {
+      const response = await fetch(`/api/agent-config?os=${encodeURIComponent(os)}`, {
+        headers: { Authorization: `Bearer ${state.token}` },
+      });
+      if (response.status === 401) {
+        showLogin('Token 无效或已过期');
+        return;
+      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      triggerDownload(url, `ops-agent-${os}-config.json`);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      alert(`下载配置失败: ${error.message}`);
+    }
   }
 
   async function api(path, options = {}) {
@@ -94,9 +178,11 @@
     state.clients = data.clients || [];
     renderClients();
     $('hub-status').textContent = `在线 ${state.clients.filter((c) => c.status === 'online').length} / 共 ${state.clients.length}`;
-    if (!state.selected && state.clients.length) {
+    if (!state.selected && state.clients.length && state.view !== 'downloads') {
       const first = state.clients.find((c) => c.status === 'online') || state.clients[0];
       await selectClient(first.id);
+    } else if (!state.clients.length && state.view !== 'downloads') {
+      showDownloads();
     }
   }
 
@@ -132,12 +218,14 @@
   async function selectClient(id) {
     const data = await api(`/api/clients/${encodeURIComponent(id)}?refresh=1`);
     state.selected = data.client;
+    state.view = 'client';
     state.currentJob = null;
     state.jobOffset = 0;
     clearInterval(state.jobPollTimer);
     terminalOutput.textContent = '';
     $('job-info').textContent = '';
     $('cancel-btn').disabled = true;
+    $('downloads-view').classList.add('hidden');
     $('empty').classList.add('hidden');
     $('client-view').classList.remove('hidden');
     $('client-name').textContent = state.selected.name || state.selected.hostname || state.selected.id;
@@ -167,6 +255,21 @@
   $('client-search').addEventListener('input', renderClients);
   $('client-status').addEventListener('change', renderClients);
   $('refresh-btn').addEventListener('click', () => loadClients().catch((e) => alert(e.message)));
+  $('downloads-btn').addEventListener('click', showDownloads);
+  $('empty-downloads-btn').addEventListener('click', showDownloads);
+  $('close-downloads-btn').addEventListener('click', showClientOrEmpty);
+  $('reload-downloads-btn').addEventListener('click', () => loadDownloads().catch((e) => alert(e.message)));
+  for (const button of document.querySelectorAll('[data-config]')) {
+    button.addEventListener('click', () => downloadAgentConfig(button.dataset.config));
+  }
+  for (const link of document.querySelectorAll('[data-download]')) {
+    link.addEventListener('click', (event) => {
+      if (link.classList.contains('disabled')) {
+        event.preventDefault();
+        alert('本机还没有生成这个安装包，请先运行 ./scripts/package-agent.sh');
+      }
+    });
+  }
   $('refresh-client-btn').addEventListener('click', () => state.selected && selectClient(state.selected.id));
   $('delete-client-btn').addEventListener('click', async () => {
     if (!state.selected) return;

@@ -4,6 +4,10 @@ dist/
 logs/
 tmp/
 output/
+public/downloads/*.zip
+public/downloads/*.tar.gz
+public/downloads/*.exe
+public/downloads/*.msi
 config.local.json
 agent/config.local.json
 agent/agent-state.json

@@ -158,6 +158,19 @@ node index.js serve
 
 Open `http://127.0.0.1:7100` and log in with `adminToken`.
 
+After login, click **下载客户端** in the top bar to download the Windows/Linux
+Agent package and a ready-to-edit `config.json` (the config includes the current
+enrollment token, so only share it with authorized machines).
+
+If the download page says no packages are available, build them first:
+
+```bash
+./scripts/package-agent.sh
+```
+
+The script writes packages to `dist/packages/` and copies them to
+`public/downloads/` for the Hub UI.
+
 CLI:
 
 ```bash

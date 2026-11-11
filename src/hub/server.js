@@ -47,6 +47,8 @@ export async function startHub(config) {
     next();
   };
 
+  const downloadsDir = path.join(PROJECT_ROOT, 'public', 'downloads');
+
   const asyncHandler = (fn) => (req, res, next) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
@@ -82,6 +84,44 @@ export async function startHub(config) {
         requireApprovalForDangerous: config.security.requireApprovalForDangerous,
       },
     });
+  });
+
+  app.get('/api/downloads', (_req, res) => {
+    const files = [];
+    try {
+      for (const name of fs.readdirSync(downloadsDir)) {
+        if (!/\.(zip|tar\.gz|exe|msi)$/i.test(name)) continue;
+        const stat = fs.statSync(path.join(downloadsDir, name));
+        files.push({ name, size: stat.size, url: `/downloads/${encodeURIComponent(name)}` });
+      }
+    } catch {
+      // 目录不存在时返回空列表
+    }
+    files.sort((a, b) => a.name.localeCompare(b.name));
+    res.json({ success: true, files });
+  });
+
+  app.get('/api/agent-config', (req, res) => {
+    const os = req.query.os === 'linux' ? 'linux' : 'windows';
+    const agentConfig = {
+      server: config.hub.publicUrl,
+      enrollmentToken: config.auth.enrollmentToken,
+      agentToken: '',
+      clientId: '',
+      name: '',
+      tags: [os],
+      spoolDir: '',
+      allowedRoots: os === 'windows' ? ['C:\\', 'D:\\'] : ['/var/log', '/opt', '/home'],
+      maxSpoolMB: 2048,
+      maxConcurrentJobs: 4,
+      insecureSkipVerify: false,
+      caFile: '',
+      proxy: '',
+      heartbeatIntervalSec: 15,
+    };
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="ops-agent-${os}-config.json"`);
+    res.send(JSON.stringify(agentConfig, null, 2));
   });
 
   app.get('/api/clients', (req, res) => {
