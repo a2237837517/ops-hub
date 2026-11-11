@@ -433,7 +433,11 @@ Covered:
 
 ## Sponsor / 赞赏码
 
-If this project saves you time, you can support the author via the sponsor QR code. The QR image is not stored in this repository by default; place it at `assets/sponsor.png` and add it to this section if you want to publish one.
+如果这个项目对你有帮助，可以请作者喝杯咖啡。金额随意，不影响任何功能。
+
+![赞赏码](assets/sponsor.png)
+
+> 赞赏码仅用于自愿支持作者，不构成商业授权、服务承诺或技术支持合同。
 
 ## Author
 
