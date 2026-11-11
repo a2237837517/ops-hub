@@ -149,6 +149,32 @@ https://mcp.example.com/downloads/config.example.json
 The static page/files are intentionally public. The generated config endpoint
 (`/api/agent-config`) is **not** public and requires the admin token.
 
+### One-click preconfigured package via MCP
+
+In the MCPHub dashboard, open the `ops-hub` server and call:
+
+```json
+{
+  "name": "ops_agent_package",
+  "arguments": {
+    "os": "windows",
+    "arch": "amd64",
+    "name": "customerA-app01"
+  }
+}
+```
+
+The tool returns a 24-hour private URL such as:
+
+```text
+https://mcp.example.com/downloads/private/<random>/ops-agent-windows-amd64-configured.zip
+```
+
+The ZIP/TAR already contains `config.json` with `server` and
+`enrollmentToken`; download and install directly. Treat the URL as a secret:
+anyone with it can download a package containing the enrollment token.
+
+
 ## 5. Agent config
 
 ```json

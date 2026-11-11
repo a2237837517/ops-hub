@@ -4,6 +4,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod';
 import { JOB_STATUS } from '../protocol.js';
 import { truncateUtf8 } from '../utils.js';
+import { createAgentPackage } from '../hub/agent-package.js';
 
 const SERVER_NAME = 'ops-hub';
 const SERVER_VERSION = '0.1.0';
@@ -606,6 +607,29 @@ function createMcpServer({ config, gateway, jobs, files, store, logger }) {
     },
   );
 
-  logger?.info(`MCP server ${SERVER_NAME}@${SERVER_VERSION} 已注册 ${16} 个工具`);
+  server.registerTool(
+    'ops_agent_package',
+    {
+      title: '生成已配置的客户端安装包',
+      description:
+        '生成一个带 config.json（server + enrollmentToken）的 Windows/Linux Agent 安装包，并返回 24 小时有效的私有下载链接。链接等同于接入凭据，只发给授权设备。',
+      inputSchema: {
+        os: z.enum(['windows', 'linux']).describe('目标系统'),
+        arch: z.enum(['amd64', '386', 'arm64']).describe('目标架构；Windows 支持 amd64/386，Linux 支持 amd64/arm64/386'),
+        name: z.string().optional().describe('写入 config.json 的客户端名称'),
+        tags: z.array(z.string()).optional().describe('写入 config.json 的标签'),
+      },
+    },
+    async ({ os, arch, name, tags }) => {
+      try {
+        const pkg = await createAgentPackage(config, { os, arch, name, tags });
+        return textResult(pkg);
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  logger?.info(`MCP server ${SERVER_NAME}@${SERVER_VERSION} 已注册 ${17} 个工具`);
   return server;
 }

@@ -162,6 +162,7 @@ function ensureDirs(config) {
     path.join(config.hub.dataDir, 'downloads'),
     path.join(config.hub.dataDir, 'staging'),
     path.join(config.hub.dataDir, 'uploads'),
+    path.join(config.hub.dataDir, 'agent-packages'),
     path.join(config.hub.dataDir, 'logs'),
   ];
   for (const dir of dirs) fs.mkdirSync(dir, { recursive: true });
