@@ -25,7 +25,9 @@ README_WIN='Ops Hub Agent (Windows)
    服务名：OpsHubAgent
    日志：C:\ProgramData\OpsHubAgent\logs\agent.log
 
-3. 卸载：以管理员身份运行 uninstall.bat。
+3. 如果安装服务时报 “A system shutdown is in progress”，先重启系统；
+   或者直接运行 run.bat 前台启动（不安装服务，窗口不能关）。
+4. 卸载：以管理员身份运行 uninstall.bat。
 
 说明：
 - 客户端只主动出站 443，不需要公网 IP，不需要开入站端口。
@@ -55,6 +57,7 @@ make_windows_pkg() {
   cp "$exe" "$dir/ops-agent.exe"
   cp "$AGENT_DIR/config.example.json" "$dir/config.example.json"
   cp "$AGENT_DIR/install.bat" "$dir/install.bat"
+  cp "$AGENT_DIR/run.bat" "$dir/run.bat"
   cp "$AGENT_DIR/uninstall.bat" "$dir/uninstall.bat"
   printf '%s' "$README_WIN" > "$dir/README.txt"
   python3 - "$dir" "$PKG_DIR/ops-agent-windows-${arch}.zip" <<'PY'

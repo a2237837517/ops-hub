@@ -235,6 +235,11 @@ Supported: Windows Server 2008 R2 and later (amd64/386). Windows Server 2008 (no
 3. Fill in `server`, `enrollmentToken`, `name`, `tags`, and `allowedRoots`.
 4. Right-click `install.bat` → **Run as administrator**.
 
+If `install.bat` reports `A system shutdown is in progress`, the Windows Service
+Control Manager is refusing to create a service during shutdown/restart. Reboot
+and retry, or run `run.bat` for foreground mode (no service; keep the window
+open).
+
 The Agent installs as the `OpsHubAgent` Windows service and writes logs to:
 
 ```text
