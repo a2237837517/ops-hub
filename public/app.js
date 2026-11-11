@@ -1293,6 +1293,12 @@
   }
 
   async function init() {
+    const urlToken = new URLSearchParams(location.search).get('token');
+    if (urlToken) {
+      history.replaceState(null, '', location.pathname + location.hash);
+      await loginWithToken(urlToken);
+      return;
+    }
     if (!state.token) {
       showLogin();
       return;

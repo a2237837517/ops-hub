@@ -363,6 +363,7 @@ Optional per-user audit: declare an upstream credential slot so every gateway us
 | `ops_stat_file` | Size/mtime/mode/SHA-256 |
 | `ops_delete` | Delete a file or directory (`recursive=true` for dirs; protected system paths refused) |
 | `ops_agent_package` | Build preconfigured Agent installers with `config.json` embedded; defaults to all Windows/Linux architectures and returns 24h private URLs |
+| `ops_access_info` | Return admin URL, token-login URL, admin/enrollment tokens, download page and endpoints |
 
 Output is intentionally bounded: `ops_exec` returns at most 64KB by default and stores the full log under `data/jobs/`. Continue with `ops_exec_output` and `next_offset`.
 

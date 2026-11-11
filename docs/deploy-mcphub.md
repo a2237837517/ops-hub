@@ -30,6 +30,11 @@ Only three public paths are exposed:
 
 The Ops Hub admin UI is available at `https://mcp.example.com/ops/` (login with `adminToken`). Its `/api` is reachable only through the `/ops/` prefix; the raw `/api` and `/mcp` paths are not exposed.
 
+The MCP tool `ops_access_info` returns a one-click login URL
+(`https://mcp.example.com/ops/?token=<adminToken>`), the admin token, the
+enrollment token, the download page, and both endpoints. Treat the result as
+sensitive; rotate tokens if it leaks.
+
 ## 1. Deploy the Hub on a private host
 
 Example host: `10.0.0.20` (bind only the private interface).

@@ -4,7 +4,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod';
 import { JOB_STATUS } from '../protocol.js';
 import { truncateUtf8 } from '../utils.js';
-import { createAgentPackage } from '../hub/agent-package.js';
+import { createAgentPackage, publicBaseUrl } from '../hub/agent-package.js';
 
 const SERVER_NAME = 'ops-hub';
 const SERVER_VERSION = '0.1.0';
@@ -665,6 +665,34 @@ function createMcpServer({ config, gateway, jobs, files, store, logger }) {
     },
   );
 
-  logger?.info(`MCP server ${SERVER_NAME}@${SERVER_VERSION} 已注册 ${17} 个工具`);
+  server.registerTool(
+    'ops_access_info',
+    {
+      title: '获取 Ops Hub 访问信息和密钥',
+      description:
+        '一键获取 Ops Hub 管理地址、带令牌登录链接、enrollmentToken、Agent 下载页和端点。返回内容含管理令牌，只应给授权运维人员。',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const base = publicBaseUrl(config);
+        const adminUrl = `${base}/ops/`;
+        return textResult({
+          adminUrl,
+          adminUrlWithToken: `${adminUrl}?token=${encodeURIComponent(config.auth.adminToken)}`,
+          adminToken: config.auth.adminToken,
+          enrollmentToken: config.auth.enrollmentToken,
+          agentEndpoint: config.hub.publicUrl,
+          downloadPage: `${base}/downloads/`,
+          mcpEndpoint: `${base}/mcp`,
+          note: 'adminToken / enrollmentToken 是敏感凭据。带令牌链接只发给授权运维人员，泄露后请轮换 token。',
+        });
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  logger?.info(`MCP server ${SERVER_NAME}@${SERVER_VERSION} 已注册 ${18} 个工具`);
   return server;
 }

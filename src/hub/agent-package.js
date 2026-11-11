@@ -7,7 +7,7 @@ import { safeFileName, sha256File, randomToken } from '../utils.js';
 const PACKAGE_ROOT = path.join(PROJECT_ROOT, 'public', 'downloads');
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-function publicBaseUrl(config) {
+export function publicBaseUrl(config) {
   if (config.hub.publicBaseUrl) return String(config.hub.publicBaseUrl).replace(/\/+$/, '');
   try {
     const url = new URL(config.hub.publicUrl);
