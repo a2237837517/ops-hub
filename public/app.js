@@ -705,6 +705,39 @@
     return $('file-path').value.trim() || (isWindows(state.selected) ? 'C:\\' : '/');
   }
 
+  function fileExtension(name) {
+    const value = String(name || '').split(/[\\/]/).pop() || '';
+    const idx = value.lastIndexOf('.');
+    return idx >= 0 ? value.slice(idx + 1).toLowerCase() : '';
+  }
+
+  function isPreviewableFile(path) {
+    const ext = fileExtension(path);
+    const blocked = new Set([
+      'gz', 'tgz', 'zip', 'rar', '7z', 'bz2', 'xz', 'zst', 'tar',
+      'exe', 'dll', 'so', 'bin', 'iso', 'img', 'jar', 'war', 'class',
+      'db', 'sqlite', 'sqlite3', 'pdf', 'png', 'jpg', 'jpeg', 'gif',
+      'webp', 'ico', 'bmp', 'mp3', 'mp4', 'avi', 'mov', 'wav', 'flac',
+    ]);
+    return !blocked.has(ext);
+  }
+
+  function fileIcon(entry) {
+    if (entry.dir) return '📁';
+    const ext = fileExtension(entry.name);
+    if (['gz', 'tgz', 'zip', 'rar', '7z', 'bz2', 'xz', 'zst', 'tar'].includes(ext)) return '📦';
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'bmp'].includes(ext)) return '🖼️';
+    if (['exe', 'dll', 'so', 'bin', 'jar', 'war'].includes(ext)) return '⚙️';
+    return '📄';
+  }
+
+  function setFileStatus(text, kind = '') {
+    const el = $('file-status');
+    if (!el) return;
+    el.textContent = text;
+    el.className = `muted ${kind}`.trim();
+  }
+
   function navigateUp() {
     if (!state.selected) return;
     const parent = parentRemotePath(currentRemotePath(), isWindows(state.selected));
@@ -732,8 +765,11 @@
     for (const entry of entries) {
       rows.push(`
         <div class="file-row ${entry.dir ? 'dir' : ''}" data-path="${escapeHtml(entry.path)}" data-dir="${entry.dir ? '1' : '0'}">
-          <span>${entry.dir ? '📁' : '📄'} ${escapeHtml(entry.name)}</span>
-          <span class="size">${entry.dir ? '' : formatBytes(entry.size)} ${escapeHtml(entry.modTime || '')}</span>
+          <span>${fileIcon(entry)} ${escapeHtml(entry.name)}</span>
+          <span class="row-actions">
+            <span class="size">${entry.dir ? '' : formatBytes(entry.size)} ${escapeHtml(entry.modTime || '')}</span>
+            ${entry.dir ? '' : `<button class="row-download" data-download-path="${escapeHtml(entry.path)}" title="下载 ${escapeHtml(entry.name)}">⬇</button>`}
+          </span>
         </div>`);
     }
     if (!entries.length && !parent) {
@@ -741,6 +777,13 @@
     }
     fileList.innerHTML = rows.join('');
     for (const row of fileList.querySelectorAll('.file-row')) {
+      const downloadButton = row.querySelector('[data-download-path]');
+      if (downloadButton) {
+        downloadButton.addEventListener('click', (event) => {
+          event.stopPropagation();
+          downloadFile(downloadButton.dataset.downloadPath);
+        });
+      }
       row.addEventListener('click', () => {
         if (row.dataset.up === '1') {
           navigateUp();
@@ -758,10 +801,20 @@
     state.selectedFile = path;
     state.tailCursor = null;
     $('file-selected').textContent = path;
-    $('file-tail-btn').disabled = false;
+    const previewable = isPreviewableFile(path);
+    $('file-tail-btn').disabled = !previewable;
     $('file-download-btn').disabled = false;
-    fileOutput.textContent = '';
-    tailFile();
+    fileOutput.textContent = previewable
+      ? ''
+      : '该文件是压缩包、二进制或媒体文件，不支持文本预览。\n请点击左侧「⬇ 下载」或文件行的 ⬇ 下载到本地。\n';
+    if (previewable) {
+      tailFile().catch((e) => {
+        fileOutput.textContent = `读取失败: ${e.message}`;
+      });
+      setFileStatus(`已选择 ${path}`, 'ok');
+    } else {
+      setFileStatus(`压缩/二进制文件：${path}，请下载查看`, '');
+    }
   }
 
   async function tailFile() {
@@ -787,41 +840,132 @@
       navigateUp();
     }
   });
-  $('file-tail-btn').addEventListener('click', () => tailFile().catch((e) => alert(e.message)));
-  $('file-download-btn').addEventListener('click', async () => {
-    if (!state.selected || !state.selectedFile) return;
+  async function downloadFile(path) {
+    if (!state.selected || !path) return;
+    setFileStatus(`下载中: ${path}`, '');
     try {
-      const response = await api(
-        `/api/clients/${encodeURIComponent(state.selected.id)}/files/download?path=${encodeURIComponent(state.selectedFile)}`,
+      const response = await fetch(
+        `/api/clients/${encodeURIComponent(state.selected.id)}/files/download?path=${encodeURIComponent(path)}`,
+        { headers: { Authorization: `Bearer ${state.token}` } },
       );
+      if (response.status === 401) {
+        showLogin('Token 无效或已过期');
+        return;
+      }
+      if (!response.ok) {
+        let message = `HTTP ${response.status}`;
+        try {
+          const data = await response.json();
+          message = data.message || message;
+        } catch {
+          // ignore
+        }
+        throw new Error(message);
+      }
       const blob = await response.blob();
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = state.selectedFile.split(/[\\/]/).pop() || 'download';
-      link.click();
-      URL.revokeObjectURL(link.href);
+      const url = URL.createObjectURL(blob);
+      triggerDownload(url, String(path).split(/[\\/]/).pop() || 'download');
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setFileStatus(`已下载 ${path} (${formatBytes(blob.size)})`, 'ok');
     } catch (error) {
-      alert(error.message);
+      setFileStatus(`下载失败: ${error.message}`, 'error');
+      alert(`下载失败: ${error.message}`);
     }
-  });
+  }
+
+  function setUploadProgress(percent, text) {
+    $('upload-progress-wrap').classList.remove('hidden');
+    $('upload-progress-bar').style.width = `${Math.max(0, Math.min(100, percent))}%`;
+    $('upload-progress-text').textContent = text;
+  }
+
+  function hideUploadProgress(delay = 0) {
+    setTimeout(() => {
+      $('upload-progress-wrap').classList.add('hidden');
+      $('upload-progress-bar').style.width = '0%';
+      $('upload-progress-text').textContent = '';
+    }, delay);
+  }
+
+  function uploadFileToClient(file, targetPath, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open(
+        'POST',
+        `/api/clients/${encodeURIComponent(state.selected.id)}/files/upload?path=${encodeURIComponent(targetPath)}&overwrite=1`,
+      );
+      xhr.setRequestHeader('Authorization', `Bearer ${state.token}`);
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        onProgress?.(Math.round((event.loaded / event.total) * 100));
+      };
+      xhr.onload = () => {
+        let data = {};
+        try {
+          data = JSON.parse(xhr.responseText || '{}');
+        } catch {
+          // ignore
+        }
+        if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+        else reject(new Error(data.message || `HTTP ${xhr.status}`));
+      };
+      xhr.onerror = () => reject(new Error('网络错误'));
+      xhr.onabort = () => reject(new Error('上传已取消'));
+      xhr.send(file);
+    });
+  }
+
+  async function handleUploadFiles(fileList) {
+    if (!state.selected) return;
+    const files = Array.from(fileList || []).filter(Boolean);
+    if (!files.length) return;
+    const dir = currentRemotePath();
+    const preview = files.length === 1 ? joinRemote(dir, files[0].name) : `${dir}（${files.length} 个文件）`;
+    if (!confirm(`上传到 ${preview} ？`)) return;
+    setFileStatus(`准备上传 ${files.length} 个文件...`, '');
+    let index = 0;
+    try {
+      for (const file of files) {
+        index += 1;
+        setUploadProgress(0, `上传 ${index}/${files.length}: ${file.name} 0%`);
+        await uploadFileToClient(file, joinRemote(dir, file.name), (percent) => {
+          setUploadProgress(percent, `上传 ${index}/${files.length}: ${file.name} ${percent}%`);
+        });
+      }
+      setFileStatus(`上传完成: ${files.length} 个文件`, 'ok');
+      setUploadProgress(100, '上传完成');
+      hideUploadProgress(1200);
+      await listFiles();
+    } catch (error) {
+      setFileStatus(`上传失败: ${error.message}`, 'error');
+      hideUploadProgress(2000);
+      alert(`上传失败: ${error.message}`);
+    }
+  }
+
+  $('file-tail-btn').addEventListener('click', () => tailFile().catch((e) => alert(e.message)));
+  $('file-download-btn').addEventListener('click', () => downloadFile(state.selectedFile));
 
   $('file-upload').addEventListener('change', async (event) => {
-    const file = event.target.files?.[0];
-    if (!file || !state.selected) return;
-    const target = joinRemote($('file-path').value.trim(), file.name);
-    if (!confirm(`上传到 ${target} ?`)) return;
-    try {
-      await api(
-        `/api/clients/${encodeURIComponent(state.selected.id)}/files/upload?path=${encodeURIComponent(target)}&overwrite=1`,
-        { method: 'POST', body: file },
-      );
-      alert('上传完成');
-      listFiles().catch(console.error);
-    } catch (error) {
-      alert(`上传失败: ${error.message}`);
-    } finally {
-      event.target.value = '';
-    }
+    await handleUploadFiles(event.target.files);
+    event.target.value = '';
+  });
+
+  const dropZone = $('file-drop');
+  for (const type of ['dragenter', 'dragover']) {
+    dropZone.addEventListener(type, (event) => {
+      event.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+  }
+  for (const type of ['dragleave', 'drop']) {
+    dropZone.addEventListener(type, (event) => {
+      event.preventDefault();
+      dropZone.classList.remove('dragover');
+    });
+  }
+  dropZone.addEventListener('drop', (event) => {
+    handleUploadFiles(event.dataTransfer?.files);
   });
 
   async function loadJobs() {

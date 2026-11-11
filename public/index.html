@@ -119,12 +119,11 @@
             </div>
           </section>
 
-          <section id="client-info" class="client-info-grid"></section>
-
           <nav class="tabs">
             <button data-tab="terminal" class="tab active">终端</button>
             <button data-tab="files" class="tab">文件</button>
             <button data-tab="jobs" class="tab">任务</button>
+            <button data-tab="info" class="tab">系统信息</button>
             <button data-tab="audit" class="tab">审计</button>
           </nav>
 
@@ -173,17 +172,25 @@
               <input id="file-pattern" placeholder="*.log（可选）" />
               <button id="file-list-btn">列出</button>
               <button id="file-up-btn" class="ghost" title="返回上一级">↑ 上一级</button>
-              <label class="upload-btn">上传<input id="file-upload" type="file" hidden /></label>
             </div>
             <div class="file-layout">
-              <div id="file-list" class="file-list"></div>
+              <div class="file-list-wrap">
+                <div class="file-list-toolbar">
+                  <label class="upload-btn primary-upload">📤 上传文件<input id="file-upload" type="file" multiple hidden /></label>
+                  <button id="file-download-btn" class="ghost" disabled>⬇ 下载</button>
+                  <span id="file-status" class="muted">上传/下载都在左侧；点击文件行可预览文本</span>
+                </div>
+                <div id="upload-progress-wrap" class="upload-progress hidden">
+                  <div id="upload-progress-bar"></div>
+                  <span id="upload-progress-text"></span>
+                </div>
+                <div id="file-list" class="file-list"></div>
+                <div id="file-drop" class="file-drop">拖拽文件到此处上传到当前目录</div>
+              </div>
               <div class="file-preview">
                 <div class="file-preview-head">
                   <span id="file-selected" class="muted">未选择文件</span>
-                  <span>
-                    <button id="file-tail-btn" class="ghost" disabled>看最后 200 行</button>
-                    <button id="file-download-btn" class="ghost" disabled>下载</button>
-                  </span>
+                  <button id="file-tail-btn" class="ghost" disabled>看最后 200 行</button>
                 </div>
                 <pre id="file-output" class="terminal-output small"></pre>
               </div>
@@ -197,6 +204,10 @@
                 <tbody id="jobs-body"></tbody>
               </table>
             </div>
+          </section>
+
+          <section id="tab-info" class="tab-panel hidden">
+            <section id="client-info" class="client-info-grid"></section>
           </section>
 
           <section id="tab-audit" class="tab-panel hidden">

@@ -70,7 +70,7 @@ GitHub topics are configured on the repository page. The project is designed to 
 - 15 MCP tools covering inventory, command execution, files, logs, and search
 - Web admin UI: clients, terminal, files, jobs, audit
 - Rename clients (Hub display name) and view OS/IP/CPU/memory/disk info
-- File browser with parent-directory navigation
+- File browser with parent-directory navigation, left-side upload/download, drag-and-drop upload, and download-only handling for archives/binaries (`.gz`, `.zip`, images, etc.)
 - JSON state persistence + JSONL audit log
 - Dangerous-command approval policy
 - Client revocation list

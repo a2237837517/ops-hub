@@ -373,3 +373,93 @@ td.command { max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
 .info-net-ip { color: var(--accent); font-family: "JetBrains Mono", Consolas, monospace; }
 .info-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 .info-tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: #12293a; color: #9cd7ff; }
+
+/* File upload/download */
+.file-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: -2px 0 10px;
+}
+.primary-upload {
+  background: var(--accent);
+  color: #07121b;
+  border-color: var(--accent);
+  font-weight: 700;
+}
+.upload-progress {
+  position: relative;
+  flex: 1;
+  min-width: 180px;
+  height: 20px;
+  background: #0b1117;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.upload-progress-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: #1d5f86;
+  transition: width .15s ease;
+}
+#upload-progress-text {
+  position: relative;
+  display: block;
+  text-align: center;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--text);
+  font-family: "JetBrains Mono", Consolas, monospace;
+}
+.file-list-wrap { min-width: 0; }
+.file-drop {
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 7px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+.file-drop.dragover {
+  border-color: var(--accent);
+  background: #102535;
+  color: var(--text);
+}
+.file-row .row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.row-download {
+  padding: 1px 7px;
+  font-size: 12px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  line-height: 1.4;
+}
+.row-download:hover { border-color: var(--accent); }
+
+.file-list-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.file-list-toolbar #file-status {
+  flex: 1 1 160px;
+  min-width: 0;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-list-toolbar #file-status.error { color: var(--red); }
+.file-list-toolbar #file-status.ok { color: var(--green); }
+.file-list-toolbar .upload-btn { white-space: nowrap; }
+.file-list-wrap .upload-progress { width: 100%; margin-bottom: 8px; }
