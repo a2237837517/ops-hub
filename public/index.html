@@ -23,6 +23,7 @@
       <div class="top-actions">
         <span id="hub-status" class="muted">连接中...</span>
         <button id="downloads-btn" class="ghost">下载客户端</button>
+        <button id="revoked-btn" class="ghost">封禁管理</button>
         <button id="refresh-btn" class="ghost">刷新</button>
         <button id="logout-btn" class="ghost">退出</button>
       </div>
@@ -100,6 +101,22 @@
               <button id="reload-downloads-btn" class="ghost">刷新列表</button>
             </div>
             <div id="download-list" class="download-list muted">加载中...</div>
+          </div>
+        </section>
+
+        <section id="revoked-view" class="downloads hidden">
+          <div class="downloads-head">
+            <div>
+              <h2>封禁管理</h2>
+              <p class="muted">删除客户端时会把 clientId 加入封禁列表。解除后，Agent 下一次重连会自动重新注册。</p>
+            </div>
+            <button id="close-revoked-btn" class="ghost">返回</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>客户端 ID</th><th>封禁时间</th><th>操作</th></tr></thead>
+              <tbody id="revoked-body"></tbody>
+            </table>
           </div>
         </section>
 

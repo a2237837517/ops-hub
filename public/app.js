@@ -126,6 +126,7 @@
     state.view = 'downloads';
     $('empty').classList.add('hidden');
     $('client-view').classList.add('hidden');
+    $('revoked-view').classList.add('hidden');
     $('downloads-view').classList.remove('hidden');
     loadDownloads().catch((error) => {
       $('download-list').textContent = `加载失败: ${error.message}`;
@@ -135,12 +136,66 @@
   function showClientOrEmpty() {
     state.view = state.selected ? 'client' : 'clients';
     $('downloads-view').classList.add('hidden');
+    $('revoked-view').classList.add('hidden');
     if (state.selected) {
       $('client-view').classList.remove('hidden');
       $('empty').classList.add('hidden');
     } else {
       $('client-view').classList.add('hidden');
       $('empty').classList.remove('hidden');
+    }
+  }
+
+  async function loadRevoked() {
+    const data = await api('/api/revoked');
+    const list = data.revoked || [];
+    const body = $('revoked-body');
+    if (!list.length) {
+      body.innerHTML = '<tr><td colspan="3" class="muted">没有封禁的客户端</td></tr>';
+      return;
+    }
+    body.innerHTML = list
+      .map(
+        (item) => `
+        <tr>
+          <td><span class="info-net-ip">${escapeHtml(item.id)}</span></td>
+          <td>${escapeHtml(item.revokedAt || '-')}</td>
+          <td><button class="ghost" data-unrevoke="${escapeHtml(item.id)}">解除封禁</button></td>
+        </tr>`,
+      )
+      .join('');
+    for (const button of body.querySelectorAll('[data-unrevoke]')) {
+      button.addEventListener('click', () => unrevokeClient(button.dataset.unrevoke));
+    }
+  }
+
+  async function showRevoked() {
+    state.view = 'revoked';
+    $('empty').classList.add('hidden');
+    $('client-view').classList.add('hidden');
+    $('downloads-view').classList.add('hidden');
+    $('revoked-view').classList.remove('hidden');
+    try {
+      await loadRevoked();
+    } catch (error) {
+      $('revoked-body').innerHTML = `<tr><td colspan="3" class="error">加载失败: ${escapeHtml(error.message)}</td></tr>`;
+    }
+  }
+
+  async function unrevokeClient(id) {
+    const ok = await openDialog({
+      title: '解除封禁',
+      message: `客户端 ID：\n${id}\n\n解除后 Agent 下一次重连会自动重新注册。`,
+      confirmText: '解除',
+      icon: '🔓',
+    });
+    if (!ok) return;
+    try {
+      await api(`/api/clients/${encodeURIComponent(id)}/unrevoke`, { method: 'POST' });
+      await loadRevoked();
+      await loadClients();
+    } catch (error) {
+      alert(`解除失败: ${error.message}`);
     }
   }
 
@@ -263,10 +318,10 @@
     state.clients = data.clients || [];
     renderClients();
     $('hub-status').textContent = `在线 ${state.clients.filter((c) => c.status === 'online').length} / 共 ${state.clients.length}`;
-    if (!state.selected && state.clients.length && state.view !== 'downloads') {
+    if (!state.selected && state.clients.length && !['downloads', 'revoked'].includes(state.view)) {
       const first = state.clients.find((c) => c.status === 'online') || state.clients[0];
       await selectClient(first.id);
-    } else if (!state.clients.length && state.view !== 'downloads') {
+    } else if (!state.clients.length && !['downloads', 'revoked'].includes(state.view)) {
       showDownloads();
     }
   }
@@ -443,6 +498,7 @@
     updateTerminalPrompt();
     setTerminalStatus('就绪');
     $('downloads-view').classList.add('hidden');
+    $('revoked-view').classList.add('hidden');
     $('empty').classList.add('hidden');
     $('client-view').classList.remove('hidden');
     $('client-name').textContent = state.selected.displayName || state.selected.name || state.selected.hostname || state.selected.id;
@@ -482,6 +538,8 @@
   $('client-status').addEventListener('change', renderClients);
   $('refresh-btn').addEventListener('click', () => loadClients().catch((e) => alert(e.message)));
   $('downloads-btn').addEventListener('click', showDownloads);
+  $('revoked-btn').addEventListener('click', showRevoked);
+  $('close-revoked-btn').addEventListener('click', showClientOrEmpty);
   $('empty-downloads-btn').addEventListener('click', showDownloads);
   $('close-downloads-btn').addEventListener('click', showClientOrEmpty);
   $('reload-downloads-btn').addEventListener('click', () => loadDownloads().catch((e) => alert(e.message)));

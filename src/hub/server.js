@@ -158,6 +158,16 @@ export async function startHub(config) {
     res.json({ success: true, count: clients.length, clients });
   });
 
+  app.get('/api/revoked', (_req, res) => {
+    const revoked = Object.entries(store.state.revoked || {})
+      .map(([id, value]) => ({
+        id,
+        revokedAt: typeof value === 'string' ? value : value?.revokedAt || null,
+      }))
+      .sort((a, b) => String(b.revokedAt || '').localeCompare(String(a.revokedAt || '')));
+    res.json({ success: true, count: revoked.length, revoked });
+  });
+
   app.get('/api/clients/:id', asyncHandler(async (req, res) => {
     const agent = store.findAgent(req.params.id);
     if (!agent) return res.status(404).json({ success: false, message: 'client not found' });

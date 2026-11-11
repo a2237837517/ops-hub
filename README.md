@@ -75,7 +75,7 @@ GitHub topics are configured on the repository page. The project is designed to 
 - MCP tool `ops_agent_package` generates a ready-to-install Windows/Linux package with the enrollment token embedded and returns a time-limited private URL
 - JSON state persistence + JSONL audit log
 - Dangerous-command approval policy
-- Client revocation list
+- Client revocation list with a **封禁管理** UI to unban client IDs
 - No inbound connection to agents
 
 ### Agent (Go, single binary)
