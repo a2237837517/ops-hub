@@ -463,3 +463,131 @@ td.command { max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
 .file-list-toolbar #file-status.ok { color: var(--green); }
 .file-list-toolbar .upload-btn { white-space: nowrap; }
 .file-list-wrap .upload-progress { width: 100%; margin-bottom: 8px; }
+.row-delete {
+  padding: 1px 7px;
+  font-size: 12px;
+  background: transparent;
+  border: 1px solid #5a2b2b;
+  color: #ff9b9b;
+  line-height: 1.4;
+}
+.row-delete:hover { border-color: var(--red); color: var(--red); }
+
+/* Neumorphic dialog */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(3, 7, 11, 0.62);
+  backdrop-filter: blur(8px);
+  animation: dialogFade .16s ease-out;
+}
+.dialog-card {
+  position: relative;
+  width: min(440px, 100%);
+  padding: 28px 28px 22px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #1b2530, #111820);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow:
+    22px 22px 60px rgba(0, 0, 0, 0.72),
+    -12px -12px 36px rgba(255, 255, 255, 0.025),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5);
+  animation: dialogPop .2s cubic-bezier(.2, .9, .3, 1.2);
+}
+.dialog-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  font-size: 22px;
+  color: var(--accent);
+  background: linear-gradient(145deg, #17222d, #0d141b);
+  box-shadow:
+    6px 6px 14px rgba(0, 0, 0, 0.55),
+    -4px -4px 12px rgba(255, 255, 255, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.dialog-card h3 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  letter-spacing: .01em;
+}
+.dialog-message {
+  margin: 0 0 16px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.dialog-input {
+  width: 100%;
+  padding: 12px 14px;
+  margin-bottom: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: #0a1016;
+  color: var(--text);
+  font-size: 14px;
+  box-shadow:
+    inset 5px 5px 12px rgba(0, 0, 0, 0.55),
+    inset -3px -3px 10px rgba(255, 255, 255, 0.025);
+}
+.dialog-input:focus {
+  border-color: rgba(63, 182, 255, 0.65);
+  box-shadow:
+    inset 5px 5px 12px rgba(0, 0, 0, 0.55),
+    0 0 0 3px rgba(63, 182, 255, 0.12);
+}
+.dialog-error {
+  min-height: 18px;
+  color: var(--red);
+  font-size: 12px;
+  margin: 4px 0 8px;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+.dialog-btn {
+  min-width: 88px;
+  padding: 9px 16px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(145deg, #1a2530, #10171e);
+  color: var(--text);
+  box-shadow:
+    5px 5px 12px rgba(0, 0, 0, 0.45),
+    -3px -3px 9px rgba(255, 255, 255, 0.025);
+}
+.dialog-btn:hover { border-color: rgba(63, 182, 255, 0.5); }
+.dialog-btn.primary {
+  background: linear-gradient(145deg, #46c2ff, #2c9fd9);
+  border-color: rgba(80, 200, 255, 0.8);
+  color: #061018;
+  font-weight: 700;
+  box-shadow:
+    5px 5px 14px rgba(0, 0, 0, 0.45),
+    0 0 18px rgba(63, 182, 255, 0.18);
+}
+.dialog-btn.danger {
+  background: linear-gradient(145deg, #d9534f, #a63232);
+  border-color: rgba(255, 120, 120, 0.55);
+  color: #fff;
+  font-weight: 700;
+}
+.dialog-btn.ghost { background: transparent; box-shadow: none; }
+@keyframes dialogFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dialogPop {
+  from { opacity: 0; transform: translateY(10px) scale(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}

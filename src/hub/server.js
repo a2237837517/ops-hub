@@ -282,6 +282,17 @@ export async function startHub(config) {
     res.json({ success: true, ...result });
   }));
 
+  app.delete('/api/clients/:id/files', asyncHandler(async (req, res) => {
+    const agent = store.findAgent(req.params.id);
+    if (!agent) return res.status(404).json({ success: false, message: 'client not found' });
+    if (!req.query.path) return res.status(400).json({ success: false, message: 'path is required' });
+    const result = await files.deletePath(agent.id, {
+      path: req.query.path,
+      recursive: req.query.recursive === '1',
+    });
+    res.json({ success: true, ...result });
+  }));
+
   app.get('/api/clients/:id/files/read', asyncHandler(async (req, res) => {
     const agent = store.findAgent(req.params.id);
     if (!agent) return res.status(404).json({ success: false, message: 'client not found' });

@@ -71,6 +71,7 @@ GitHub topics are configured on the repository page. The project is designed to 
 - Web admin UI: clients, terminal, files, jobs, audit
 - Rename clients (Hub display name) and view OS/IP/CPU/memory/disk info
 - File browser with parent-directory navigation, left-side upload/download, drag-and-drop upload, and download-only handling for archives/binaries (`.gz`, `.zip`, images, etc.)
+- Delete files or directories from the UI (with confirmation); protected system roots are refused by the Agent
 - JSON state persistence + JSONL audit log
 - Dangerous-command approval policy
 - Client revocation list
@@ -177,6 +178,7 @@ The script writes packages to `dist/packages/` and copies them to
 
 The admin UI terminal works like a shell prompt:
 
+- `cd <path>` changes the working directory for subsequent commands
 - `Enter` executes the current command
 - `↑` / `↓` browse command history (stored per client in the browser)
 - `Ctrl+L` clears the screen
@@ -351,6 +353,7 @@ Optional per-user audit: declare an upstream credential slot so every gateway us
 | `ops_search_file` | Agent-side grep with context and regex |
 | `ops_list_dir` | List a directory (glob/recursive) |
 | `ops_stat_file` | Size/mtime/mode/SHA-256 |
+| `ops_delete` | Delete a file or directory (`recursive=true` for dirs; protected system paths refused) |
 
 Output is intentionally bounded: `ops_exec` returns at most 64KB by default and stores the full log under `data/jobs/`. Continue with `ops_exec_output` and `next_offset`.
 

@@ -401,6 +401,13 @@ func (a *Agent) dispatchRPC(method string, raw json.RawMessage) (any, error) {
 		}
 		return fileWrite(a.cfg, params)
 
+	case "file.delete":
+		var params FileDeleteParams
+		if err := json.Unmarshal(raw, &params); err != nil {
+			return nil, err
+		}
+		return fileDelete(a.cfg, params)
+
 	default:
 		return nil, fmt.Errorf("unknown rpc method: %s", method)
 	}

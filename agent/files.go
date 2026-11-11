@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -67,6 +68,11 @@ type FileWriteParams struct {
 	Encoding   string `json:"encoding"`
 	Append     bool   `json:"append"`
 	CreateDirs bool   `json:"createDirs"`
+}
+
+type FileDeleteParams struct {
+	Path      string `json:"path"`
+	Recursive bool   `json:"recursive"`
 }
 
 type UploadTransfer struct {
@@ -663,6 +669,74 @@ func fileWrite(cfg *Config, p FileWriteParams) (any, error) {
 		"encoding": p.Encoding,
 		"append":   p.Append,
 	}, nil
+}
+
+func fileDelete(cfg *Config, p FileDeleteParams) (any, error) {
+	path, err := resolvePath(cfg, p.Path)
+	if err != nil {
+		return nil, err
+	}
+	stat, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if isProtectedDeletePath(path) {
+		return nil, fmt.Errorf("拒绝删除受保护路径: %s", path)
+	}
+	if stat.IsDir() && !p.Recursive {
+		return nil, fmt.Errorf("删除目录需要 recursive=true: %s", path)
+	}
+	if stat.IsDir() {
+		err = os.RemoveAll(path)
+	} else {
+		err = os.Remove(path)
+	}
+	if err != nil {
+		return nil, err
+	}
+	kind := "file"
+	if stat.IsDir() {
+		kind = "dir"
+	}
+	return map[string]any{
+		"path":      path,
+		"type":      kind,
+		"recursive": p.Recursive,
+		"deleted":   true,
+	}, nil
+}
+
+func isProtectedDeletePath(path string) bool {
+	clean := filepath.Clean(path)
+	if runtime.GOOS == "windows" {
+		volume := filepath.VolumeName(clean)
+		if volume == "" {
+			return false
+		}
+		root := strings.TrimRight(volume, `\/`) + `\`
+		if strings.EqualFold(clean, root) || strings.EqualFold(clean, strings.TrimRight(volume, `\/`)) {
+			return true
+		}
+		protected := []string{
+			`C:\Windows`,
+			`C:\Program Files`,
+			`C:\Program Files (x86)`,
+			`C:\ProgramData`,
+			`C:\Users`,
+		}
+		for _, item := range protected {
+			if strings.EqualFold(clean, item) {
+				return true
+			}
+		}
+		return false
+	}
+	protected := map[string]bool{
+		"/": true, "/bin": true, "/boot": true, "/dev": true, "/etc": true,
+		"/home": true, "/lib": true, "/lib64": true, "/opt": true, "/proc": true,
+		"/root": true, "/sbin": true, "/sys": true, "/usr": true, "/var": true,
+	}
+	return protected[clean]
 }
 
 func (a *Agent) startUpload(msg Incoming) {

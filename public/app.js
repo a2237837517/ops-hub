@@ -45,6 +45,83 @@
     app.classList.remove('hidden');
   }
 
+  let dialogResolver = null;
+
+  function openDialog({
+    title,
+    message = '',
+    input = null,
+    confirmText = '确定',
+    danger = false,
+    icon = '✎',
+  }) {
+    return new Promise((resolve) => {
+      dialogResolver = resolve;
+      $('dialog-title').textContent = title;
+      $('dialog-message').textContent = message;
+      $('dialog-message').classList.toggle('hidden', !message);
+      $('dialog-icon').textContent = icon;
+      const inputEl = $('dialog-input');
+      const hasInput = input !== null;
+      inputEl.classList.toggle('hidden', !hasInput);
+      inputEl.value = hasInput ? String(input) : '';
+      $('dialog-error').textContent = '';
+      const confirm = $('dialog-confirm');
+      confirm.textContent = confirmText;
+      confirm.className = `dialog-btn ${danger ? 'danger' : 'primary'}`;
+      $('dialog-backdrop').classList.remove('hidden');
+      setTimeout(() => {
+        if (hasInput) {
+          inputEl.focus();
+          inputEl.select();
+        } else {
+          confirm.focus();
+        }
+      }, 30);
+    });
+  }
+
+  function closeDialog(value) {
+    $('dialog-backdrop').classList.add('hidden');
+    const resolve = dialogResolver;
+    dialogResolver = null;
+    if (resolve) resolve(value);
+  }
+
+  function submitDialog() {
+    const inputEl = $('dialog-input');
+    if (!inputEl.classList.contains('hidden')) {
+      const value = inputEl.value.trim();
+      if (!value) {
+        $('dialog-error').textContent = '不能为空';
+        inputEl.focus();
+        return;
+      }
+      closeDialog(value);
+      return;
+    }
+    closeDialog(true);
+  }
+
+  $('dialog-cancel').addEventListener('click', () => closeDialog(null));
+  $('dialog-confirm').addEventListener('click', submitDialog);
+  $('dialog-input').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      submitDialog();
+    }
+  });
+  $('dialog-backdrop').addEventListener('click', (event) => {
+    if (event.target === $('dialog-backdrop')) closeDialog(null);
+  });
+  document.addEventListener('keydown', (event) => {
+    if ($('dialog-backdrop').classList.contains('hidden')) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeDialog(null);
+    }
+  });
+
   function showDownloads() {
     state.view = 'downloads';
     $('empty').classList.add('hidden');
@@ -323,7 +400,13 @@
   async function renameClient() {
     if (!state.selected) return;
     const current = state.selected.displayName || state.selected.name || state.selected.hostname || state.selected.id;
-    const name = prompt('输入新的客户端名称（仅修改 Hub 显示名，不改 Agent 主机名）', current);
+    const name = await openDialog({
+      title: '重命名客户端',
+      message: '只修改 Hub 显示名，不会修改 Agent 上报的主机名。',
+      input: current,
+      confirmText: '保存',
+      icon: '✎',
+    });
     if (!name || name.trim() === current) return;
     try {
       const data = await api(`/api/clients/${encodeURIComponent(state.selected.id)}`, {
@@ -375,6 +458,13 @@
     renderClientInfo();
     $('file-path').value = isWindows(state.selected) ? 'C:\\' : '/';
     state.filePath = $('file-path').value;
+    state.selectedFile = null;
+    $('file-selected').textContent = '未选择文件';
+    fileOutput.textContent = '';
+    $('file-tail-btn').disabled = true;
+    $('file-download-btn').disabled = true;
+    $('file-delete-btn').disabled = true;
+    setFileStatus('上传/下载/删除都在左侧；点击文件行可预览文本');
     renderClients();
     await Promise.all([loadJobs(), loadAudit()]);
     setTimeout(focusTerminal, 50);
@@ -407,7 +497,14 @@
   $('delete-client-btn').addEventListener('click', async () => {
     if (!state.selected) return;
     const name = state.selected.name || state.selected.id;
-    if (!confirm(`删除并封禁客户端 ${name}？这会吊销 token，Agent 将无法重连。`)) return;
+    const ok = await openDialog({
+      title: '删除并封禁客户端',
+      message: `客户端：${name}\n\n这会吊销 token，Agent 将无法重连。`,
+      confirmText: '删除',
+      danger: true,
+      icon: '🗑',
+    });
+    if (!ok) return;
     try {
       await api(`/api/clients/${encodeURIComponent(state.selected.id)}`, { method: 'DELETE' });
       state.selected = null;
@@ -458,7 +555,7 @@
 
   function terminalPromptText() {
     if (!state.selected) return '$';
-    const name = state.selected.name || state.selected.hostname || state.selected.id;
+    const name = state.selected.displayName || state.selected.name || state.selected.hostname || state.selected.id;
     const cwd = $('cwd-input').value.trim() || (isWindows(state.selected) ? 'C:\\' : '~');
     if (isWindows(state.selected)) {
       return $('shell-select').value === 'powershell' ? `PS ${cwd}>` : `${cwd}>`;
@@ -527,6 +624,126 @@
     }
   }
 
+  function rememberCommand(command) {
+    state.historyIndex = -1;
+    state.historyDraft = '';
+    if (state.cmdHistory[state.cmdHistory.length - 1] !== command) {
+      state.cmdHistory.push(command);
+      saveCommandHistory();
+    }
+  }
+
+  function isCdCommand(command) {
+    return /^(cd|chdir)(\s|$)/i.test(command);
+  }
+
+  function currentCwd() {
+    return $('cwd-input').value.trim();
+  }
+
+  async function waitJobOutput(jobId, timeoutMs = 20000) {
+    let offset = 0;
+    let text = '';
+    const started = Date.now();
+    for (;;) {
+      const data = await api(
+        `/api/jobs/${encodeURIComponent(jobId)}/output?offset=${offset}&maxBytes=65536`,
+      );
+      text += data.text || '';
+      offset = data.nextOffset;
+      if (['exited', 'failed', 'cancelled', 'interrupted', 'lost'].includes(data.job.status)) {
+        return { job: data.job, text };
+      }
+      if (Date.now() - started > timeoutMs) {
+        return { job: data.job, text };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+
+  function extractPathFromOutput(text) {
+    const lines = String(text || '')
+      .split('\n')
+      .map((line) => line.replace(/^\[(stdout|stderr)\]\s?/, '').trim())
+      .filter(Boolean);
+    for (let i = lines.length - 1; i >= 0; i -= 1) {
+      const line = lines[i];
+      if (!/^(\/|[A-Za-z]:[\\/])/.test(line)) continue;
+      if (line === '/' || /^[A-Za-z]:\\?$/.test(line)) return line;
+      return line.replace(/[\\/]+$/, '');
+    }
+    return '';
+  }
+
+  function cleanJobText(text) {
+    return String(text || '')
+      .split('\n')
+      .map((line) => line.replace(/^\[(stdout|stderr)\]\s?/, ''))
+      .join('\n')
+      .trim();
+  }
+
+  async function changeDirectory(command) {
+    if (!state.selected) return;
+    const input = $('command-input');
+    const raw = command.replace(/^(cd|chdir)\b/i, '').trim();
+    const target = raw || '~';
+    const prompt = terminalPromptText();
+    appendTerminal(`\n${prompt} ${command}\n`);
+    input.value = '';
+    rememberCommand(command);
+
+    state.terminalBusy = true;
+    $('cancel-btn').disabled = false;
+    setTerminalStatus('cd', 'running');
+
+    const windows = isWindows(state.selected);
+    const shell = $('shell-select').value;
+    let probe;
+    if (windows) {
+      if (shell === 'powershell') {
+        const value = target === '~' ? '$HOME' : target.replace(/"/g, '`"');
+        probe = `Set-Location -LiteralPath "${value}"; (Get-Location).Path`;
+      } else {
+        const value = target === '~' ? '%USERPROFILE%' : target.replace(/"/g, '""');
+        probe = `cd /d "${value}" && cd`;
+      }
+    } else {
+      const value = target === '~' ? '$HOME' : `'${target.replace(/'/g, "'\\''")}'`;
+      probe = `cd -- ${value} && pwd`;
+    }
+
+    try {
+      const data = await api(`/api/clients/${encodeURIComponent(state.selected.id)}/exec`, {
+        method: 'POST',
+        body: JSON.stringify({
+          command: probe,
+          shell: $('shell-select').value || undefined,
+          cwd: currentCwd() || undefined,
+        }),
+      });
+      const result = await waitJobOutput(data.job.id);
+      const path = extractPathFromOutput(result.text);
+      if (result.job.status === 'exited' && path) {
+        $('cwd-input').value = path;
+        updateTerminalPrompt();
+        setTerminalStatus('done', 'done');
+        $('job-info').textContent = `cwd=${path}`;
+      } else {
+        appendTerminal(`${cleanJobText(result.text) || 'cd: 切换目录失败'}\n`);
+        setTerminalStatus('error', 'error');
+        $('job-info').textContent = `cwd=${currentCwd() || '~'}（未改变）`;
+      }
+    } catch (error) {
+      appendTerminal(`cd: ${error.message}\n`);
+      setTerminalStatus('error', 'error');
+    } finally {
+      state.terminalBusy = false;
+      $('cancel-btn').disabled = true;
+      focusTerminal();
+    }
+  }
+
   async function runCommand() {
     if (!state.selected) return;
     const input = $('command-input');
@@ -542,6 +759,7 @@
       appendTerminal(
         '\n可用快捷操作：\n' +
           '  clear / cls   清屏\n' +
+          '  cd <路径>     切换当前目录（后续命令沿用）\n' +
           '  help          显示帮助\n' +
           '  ↑ / ↓         翻阅命令历史\n' +
           '  Ctrl+L        清屏\n' +
@@ -555,15 +773,16 @@
       return;
     }
 
+    if (isCdCommand(command)) {
+      input.value = '';
+      await changeDirectory(command);
+      return;
+    }
+
     const prompt = terminalPromptText();
     appendTerminal(`\n${prompt} ${command}\n`);
     input.value = '';
-    state.historyIndex = -1;
-    state.historyDraft = '';
-    if (state.cmdHistory[state.cmdHistory.length - 1] !== command) {
-      state.cmdHistory.push(command);
-      saveCommandHistory();
-    }
+    rememberCommand(command);
 
     state.jobOffset = 0;
     state.terminalBusy = true;
@@ -769,6 +988,7 @@
           <span class="row-actions">
             <span class="size">${entry.dir ? '' : formatBytes(entry.size)} ${escapeHtml(entry.modTime || '')}</span>
             ${entry.dir ? '' : `<button class="row-download" data-download-path="${escapeHtml(entry.path)}" title="下载 ${escapeHtml(entry.name)}">⬇</button>`}
+            <button class="row-delete" data-delete-path="${escapeHtml(entry.path)}" data-delete-dir="${entry.dir ? '1' : '0'}" title="删除 ${escapeHtml(entry.name)}">🗑</button>
           </span>
         </div>`);
     }
@@ -782,6 +1002,13 @@
         downloadButton.addEventListener('click', (event) => {
           event.stopPropagation();
           downloadFile(downloadButton.dataset.downloadPath);
+        });
+      }
+      const deleteButton = row.querySelector('[data-delete-path]');
+      if (deleteButton) {
+        deleteButton.addEventListener('click', (event) => {
+          event.stopPropagation();
+          deleteFile(deleteButton.dataset.deletePath, deleteButton.dataset.deleteDir === '1');
         });
       }
       row.addEventListener('click', () => {
@@ -804,6 +1031,7 @@
     const previewable = isPreviewableFile(path);
     $('file-tail-btn').disabled = !previewable;
     $('file-download-btn').disabled = false;
+    $('file-delete-btn').disabled = false;
     fileOutput.textContent = previewable
       ? ''
       : '该文件是压缩包、二进制或媒体文件，不支持文本预览。\n请点击左侧「⬇ 下载」或文件行的 ⬇ 下载到本地。\n';
@@ -873,6 +1101,45 @@
     }
   }
 
+  async function deleteFile(path, isDir) {
+    if (!state.selected || !path) return;
+    const label = isDir ? '目录（含目录下全部内容）' : '文件';
+    const ok = await openDialog({
+      title: isDir ? '删除目录' : '删除文件',
+      message: `${label}：\n${path}\n\n此操作不可恢复。`,
+      confirmText: '删除',
+      danger: true,
+      icon: '🗑',
+    });
+    if (!ok) return;
+    setFileStatus(`删除中: ${path}`, '');
+    try {
+      await api(
+        `/api/clients/${encodeURIComponent(state.selected.id)}/files?path=${encodeURIComponent(path)}&recursive=${isDir ? '1' : '0'}`,
+        { method: 'DELETE' },
+      );
+      setFileStatus(`已删除 ${path}`, 'ok');
+      const selected = state.selectedFile;
+      if (
+        selected &&
+        (selected === path ||
+          (isDir && (selected.startsWith(`${path}/`) || selected.startsWith(`${path}\\`))))
+      ) {
+        state.selectedFile = null;
+        state.tailCursor = null;
+        $('file-selected').textContent = '未选择文件';
+        $('file-tail-btn').disabled = true;
+        $('file-download-btn').disabled = true;
+        $('file-delete-btn').disabled = true;
+        fileOutput.textContent = '';
+      }
+      await listFiles();
+    } catch (error) {
+      setFileStatus(`删除失败: ${error.message}`, 'error');
+      alert(`删除失败: ${error.message}`);
+    }
+  }
+
   function setUploadProgress(percent, text) {
     $('upload-progress-wrap').classList.remove('hidden');
     $('upload-progress-bar').style.width = `${Math.max(0, Math.min(100, percent))}%`;
@@ -921,7 +1188,13 @@
     if (!files.length) return;
     const dir = currentRemotePath();
     const preview = files.length === 1 ? joinRemote(dir, files[0].name) : `${dir}（${files.length} 个文件）`;
-    if (!confirm(`上传到 ${preview} ？`)) return;
+    const ok = await openDialog({
+      title: '上传文件',
+      message: `上传到：\n${preview}`,
+      confirmText: '上传',
+      icon: '📤',
+    });
+    if (!ok) return;
     setFileStatus(`准备上传 ${files.length} 个文件...`, '');
     let index = 0;
     try {
@@ -945,6 +1218,7 @@
 
   $('file-tail-btn').addEventListener('click', () => tailFile().catch((e) => alert(e.message)));
   $('file-download-btn').addEventListener('click', () => downloadFile(state.selectedFile));
+  $('file-delete-btn').addEventListener('click', () => deleteFile(state.selectedFile, false));
 
   $('file-upload').addEventListener('change', async (event) => {
     await handleUploadFiles(event.target.files);

@@ -576,6 +576,36 @@ function createMcpServer({ config, gateway, jobs, files, store, logger }) {
     },
   );
 
-  logger?.info(`MCP server ${SERVER_NAME}@${SERVER_VERSION} 已注册 ${15} 个工具`);
+  server.registerTool(
+    'ops_delete',
+    {
+      title: '删除文件或目录',
+      description:
+        '删除客户端文件或目录。删除目录必须 recursive=true，并会删除目录下全部内容；需要显式传 approveDangerous=true。受保护的系统目录（/、/etc、/home、C:\\Windows 等）会被 Agent 拒绝。',
+      inputSchema: {
+        clientId: z.string().describe('客户端 ID 或名称'),
+        path: z.string().describe('客户端文件/目录路径'),
+        recursive: z.boolean().optional().describe('删除目录时必须为 true'),
+        approveDangerous: z.boolean().optional().describe('确认删除，必须为 true'),
+      },
+    },
+    async ({ clientId, path: remotePath, recursive, approveDangerous }) => {
+      try {
+        if (!approveDangerous) {
+          throw new Error('删除操作需要显式传 approveDangerous=true');
+        }
+        const id = resolveClientId(clientId);
+        const result = await files.deletePath(id, {
+          path: remotePath,
+          recursive: Boolean(recursive),
+        });
+        return textResult(result);
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  logger?.info(`MCP server ${SERVER_NAME}@${SERVER_VERSION} 已注册 ${16} 个工具`);
   return server;
 }

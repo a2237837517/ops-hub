@@ -346,6 +346,15 @@ export class FileManager {
     return this.gateway.rpc(clientId, 'file.write', params, 60_000);
   }
 
+  deletePath(clientId, params) {
+    this.store.audit('file.delete', {
+      clientId,
+      path: params.path,
+      recursive: Boolean(params.recursive),
+    });
+    return this.gateway.rpc(clientId, 'file.delete', params, 60_000);
+  }
+
   clientInfo(clientId, params = {}) {
     return this.gateway.rpc(clientId, 'client.info', params, 30_000);
   }

@@ -137,7 +137,7 @@
                   <option value="bash">bash</option>
                   <option value="sh">sh</option>
                 </select>
-                <input id="cwd-input" placeholder="工作目录（可选）" />
+                <input id="cwd-input" placeholder="当前目录（cd 可切换）" />
                 <label class="check"><input id="approve-dangerous" type="checkbox" /> 允许高危</label>
               </div>
               <div class="terminal-toolbar-right">
@@ -163,7 +163,7 @@
               </div>
               <div id="job-info" class="terminal-job-info"></div>
             </div>
-            <div class="terminal-hint muted">Enter 执行 · ↑/↓ 命令历史 · Ctrl+L 清屏 · Ctrl+C 终止当前任务</div>
+            <div class="terminal-hint muted">Enter 执行 · cd &lt;路径&gt; 切换目录 · ↑/↓ 命令历史 · Ctrl+L 清屏 · Ctrl+C 终止当前任务</div>
           </section>
 
           <section id="tab-files" class="tab-panel hidden">
@@ -178,7 +178,8 @@
                 <div class="file-list-toolbar">
                   <label class="upload-btn primary-upload">📤 上传文件<input id="file-upload" type="file" multiple hidden /></label>
                   <button id="file-download-btn" class="ghost" disabled>⬇ 下载</button>
-                  <span id="file-status" class="muted">上传/下载都在左侧；点击文件行可预览文本</span>
+                  <button id="file-delete-btn" class="ghost danger" disabled>🗑 删除</button>
+                  <span id="file-status" class="muted">上传/下载/删除都在左侧；点击文件行可预览文本</span>
                 </div>
                 <div id="upload-progress-wrap" class="upload-progress hidden">
                   <div id="upload-progress-bar"></div>
@@ -215,6 +216,20 @@
           </section>
         </div>
       </main>
+    </div>
+  </div>
+
+  <div id="dialog-backdrop" class="dialog-backdrop hidden">
+    <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+      <div id="dialog-icon" class="dialog-icon">✎</div>
+      <h3 id="dialog-title">标题</h3>
+      <p id="dialog-message" class="dialog-message muted"></p>
+      <input id="dialog-input" class="dialog-input hidden" autocomplete="off" />
+      <div id="dialog-error" class="dialog-error"></div>
+      <div class="dialog-actions">
+        <button id="dialog-cancel" class="dialog-btn ghost">取消</button>
+        <button id="dialog-confirm" class="dialog-btn primary">确定</button>
+      </div>
     </div>
   </div>
 
