@@ -83,14 +83,43 @@ export function truncateUtf8(text, maxBytes) {
 }
 
 export class Logger {
-  constructor({ level = 'info', file = null } = {}) {
+  constructor({ level = 'info', file = null, maxBytes = 10 * 1024 * 1024, maxBackups = 9 } = {}) {
     this.level = level;
     this.file = file;
+    this.maxBytes = maxBytes;
+    this.maxBackups = maxBackups;
+    this.currentSize = 0;
     this.levels = { debug: 10, info: 20, warn: 30, error: 40 };
     if (file) {
       fs.mkdirSync(path.dirname(file), { recursive: true });
-      this.stream = fs.createWriteStream(file, { flags: 'a' });
+      try {
+        this.currentSize = fs.statSync(file).size;
+      } catch {
+        this.currentSize = 0;
+      }
     }
+  }
+
+  _rotate() {
+    if (!this.file) return;
+    try {
+      fs.unlinkSync(`${this.file}.${this.maxBackups + 1}`);
+    } catch {
+      // ignore
+    }
+    for (let i = this.maxBackups - 1; i >= 1; i -= 1) {
+      try {
+        fs.renameSync(`${this.file}.${i}`, `${this.file}.${i + 1}`);
+      } catch {
+        // ignore missing backup
+      }
+    }
+    try {
+      fs.renameSync(this.file, `${this.file}.1`);
+    } catch {
+      // ignore
+    }
+    this.currentSize = 0;
   }
 
   _write(level, args) {
@@ -100,7 +129,15 @@ export class Logger {
       .join(' ')}`;
     const consoleFn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
     consoleFn(line);
-    if (this.stream) this.stream.write(line + '\n');
+    if (this.file) {
+      try {
+        fs.appendFileSync(this.file, line + '\n');
+        this.currentSize += Buffer.byteLength(line + '\n');
+        if (this.currentSize >= this.maxBytes) this._rotate();
+      } catch {
+        // never let logging break the hub
+      }
+    }
   }
 
   debug(...args) { this._write('debug', args); }

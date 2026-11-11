@@ -9,6 +9,7 @@
   "allowedRoots": [],
   "maxSpoolMB": 2048,
   "maxConcurrentJobs": 4,
+  "maxTransferKBps": 0,
   "insecureSkipVerify": false,
   "caFile": "",
   "proxy": "",

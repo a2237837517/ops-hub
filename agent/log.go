@@ -8,6 +8,11 @@ import (
 	"time"
 )
 
+const (
+	logMaxSize = 10 * 1024 * 1024
+	logBackups = 9
+)
+
 type Logger struct {
 	mu   sync.Mutex
 	file *os.File
@@ -38,16 +43,29 @@ func (l *Logger) logf(level, format string, args ...any) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.file != nil {
-		if info, err := l.file.Stat(); err == nil && info.Size() > 10*1024*1024 {
-			_ = l.file.Close()
-			_ = os.Rename(l.path, l.path+".1")
-			if f, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
-				l.file = f
-			}
+		if info, err := l.file.Stat(); err == nil && info.Size() >= logMaxSize {
+			l.rotateLocked()
 		}
-		_, _ = l.file.WriteString(line)
+		if l.file != nil {
+			_, _ = l.file.WriteString(line)
+		}
 	}
 	fmt.Fprint(os.Stderr, line)
+}
+
+func (l *Logger) rotateLocked() {
+	if l.file == nil {
+		return
+	}
+	_ = l.file.Close()
+	_ = os.Remove(fmt.Sprintf("%s.%d", l.path, logBackups+1))
+	for i := logBackups - 1; i >= 1; i-- {
+		_ = os.Rename(fmt.Sprintf("%s.%d", l.path, i), fmt.Sprintf("%s.%d", l.path, i+1))
+	}
+	_ = os.Rename(l.path, l.path+".1")
+	if f, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
+		l.file = f
+	}
 }
 
 func (l *Logger) Infof(format string, args ...any)  { l.logf("INFO", format, args...) }

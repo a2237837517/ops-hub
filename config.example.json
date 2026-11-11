@@ -18,6 +18,7 @@
     "maxConcurrentJobsPerClient": 4,
     "maxOutputBytesPerJob": 52428800,
     "maxChunkBytes": 262144,
+    "maxTransferKBps": 0,
     "maxFileBytes": 2147483648,
     "maxReadBytes": 262144,
     "maxTailLines": 1000,

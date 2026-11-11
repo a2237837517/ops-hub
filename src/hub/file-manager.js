@@ -156,6 +156,7 @@ export class FileManager {
           const ack = await this._wait(transferId, MSG.FILE_UPLOAD_ACK, 300_000);
           offset = Number(ack.received ?? offset + read);
           this.store.updateTransfer(transferId, { offset });
+          await this._throttle(read);
         }
       } finally {
         fs.closeSync(fd);
@@ -278,6 +279,12 @@ export class FileManager {
       this.store.audit('file.download.failed', { transferId, clientId, error: error.message });
       throw error;
     }
+  }
+
+  async _throttle(bytes) {
+    const kbps = Number(this.config.limits.maxTransferKBps) || 0;
+    if (kbps <= 0 || bytes <= 0) return;
+    await new Promise((resolve) => setTimeout(resolve, Math.ceil((bytes / 1024 / kbps) * 1000)));
   }
 
   _onDownloadChunk(clientId, msg) {

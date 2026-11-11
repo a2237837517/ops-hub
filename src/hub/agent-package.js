@@ -111,6 +111,7 @@ export async function createAgentPackage(config, { os, arch, name = '', tags = [
       allowedRoots: [],
       maxSpoolMB: 2048,
       maxConcurrentJobs: 4,
+      maxTransferKBps: Number(config.limits.maxTransferKBps) || 0,
       insecureSkipVerify: false,
       caFile: '',
       proxy: '',

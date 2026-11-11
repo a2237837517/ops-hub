@@ -970,6 +970,7 @@ func (a *Agent) runDownload(ctx context.Context, tr *DownloadTransfer) {
 			case <-ctx.Done():
 				return
 			}
+			transferThrottle(n, a.cfg.MaxTransferKBps)
 			offset += int64(n)
 		}
 		if err == io.EOF {
@@ -990,6 +991,13 @@ func (a *Agent) runDownload(ctx context.Context, tr *DownloadTransfer) {
 		"size":       tr.Size,
 		"sha256":     sum,
 	})
+}
+
+func transferThrottle(bytes, kbps int) {
+	if kbps <= 0 || bytes <= 0 {
+		return
+	}
+	time.Sleep(time.Duration(float64(bytes) / float64(kbps*1024) * float64(time.Second)))
 }
 
 func (a *Agent) downloadAck(transferID string) {

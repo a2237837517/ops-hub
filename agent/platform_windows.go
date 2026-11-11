@@ -179,6 +179,10 @@ func installService(configPath string) error {
 	if err := service.Start(); err != nil {
 		return fmt.Errorf("启动服务失败: %w", err)
 	}
+	// 崩溃/异常退出时由 SCM 自动拉起
+	if err := exec.Command("sc.exe", "failure", serviceName, "reset=", "86400", "actions=", "restart/5000/restart/10000/restart/30000").Run(); err != nil {
+		fmt.Printf("警告: 设置服务自动恢复失败: %v\n", err)
+	}
 	fmt.Printf("服务 %s 已安装并启动\n", serviceName)
 	return nil
 }

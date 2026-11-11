@@ -27,6 +27,7 @@ type Config struct {
 	AllowedRoots         []string `json:"allowedRoots"`
 	MaxSpoolMB           int64    `json:"maxSpoolMB"`
 	MaxConcurrentJobs    int      `json:"maxConcurrentJobs"`
+	MaxTransferKBps      int      `json:"maxTransferKBps"`
 	InsecureSkipVerify   bool     `json:"insecureSkipVerify"`
 	CAFile               string   `json:"caFile"`
 	Proxy                string   `json:"proxy"`

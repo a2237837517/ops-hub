@@ -293,6 +293,7 @@ sudo ./uninstall-linux.sh
   "allowedRoots": ["C:\\", "D:\\"],
   "maxSpoolMB": 2048,
   "maxConcurrentJobs": 4,
+  "maxTransferKBps": 0,
   "insecureSkipVerify": false,
   "caFile": "",
   "proxy": "",
@@ -301,6 +302,8 @@ sudo ./uninstall-linux.sh
 ```
 
 - `allowedRoots` restricts file APIs. Empty means “allow all” — set it in production.
+- `maxTransferKBps` limits file transfer speed (0 = unlimited); use e.g. `4096` on busy desktops.
+- File transfers are chunked at 256KB with per-chunk ACKs; the Agent log set is capped at 100MB and Windows service recovery restarts a crashed Agent.
 - `proxy` supports `http://user:pass@proxy:8080`; `HTTP_PROXY`/`HTTPS_PROXY` are also honored.
 - `agentToken` is issued by the hub on first registration and stored in `agent-state.json`.
 - `insecureSkipVerify` is for testing only.
@@ -461,6 +464,16 @@ Covered:
 - Agent encoding (UTF-8/GBK), file read/tail/search, path sandbox
 
 ---
+
+## Resource behavior
+
+- Agent logs: 10MB per file, 9 rotated backups, **100MB total**.
+- Hub logs: same 10MB × 9 rotation (**100MB total**); Docker logs are separately capped at 50MB × 3.
+- Job output is separate from logs: capped by `maxOutputBytesPerJob` (default 50MB) and pruned by age/count.
+- File transfer is chunked at 256KB with a per-chunk ACK; the whole file is never loaded into memory.
+- `maxTransferKBps` (Hub and Agent) can cap transfer bandwidth; `0` means unlimited. Set e.g. `4096` on busy desktops.
+- Windows installs configure SCM recovery (`sc failure ... restart`); Linux systemd uses `Restart=always`. A crashed Agent is restarted, but a running transfer is not automatically throttled or cancelled.
+- Large files can still saturate the client's disk/network; use the bandwidth cap or schedule transfers off-hours.
 
 ## Limitations
 
