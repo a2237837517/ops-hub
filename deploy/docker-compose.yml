@@ -1,0 +1,38 @@
+name: ops-hub
+
+services:
+  ops-hub:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: ops-hub:0.1.0
+    container_name: ops-hub
+    restart: unless-stopped
+    # Local test: bind to localhost only.
+    # Production: bind to the private interface that your MCP gateway can reach,
+    # e.g. "10.0.0.10:7100:7100", and keep it behind a firewall.
+    ports:
+      - "127.0.0.1:7100:7100"
+    volumes:
+      - ../data:/app/data
+      - ../config.local.json:/app/config.local.json:ro
+    environment:
+      - TZ=Asia/Shanghai
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:7100/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

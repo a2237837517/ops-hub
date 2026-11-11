@@ -1,0 +1,204 @@
+//go:build windows
+
+package main
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"time"
+
+	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
+	"golang.org/x/sys/windows/svc"
+	"golang.org/x/sys/windows/svc/mgr"
+)
+
+const (
+	serviceName        = "OpsHubAgent"
+	serviceDisplayName = "Ops Hub Agent"
+	serviceDescription = "Ops Hub remote operations agent (outbound WebSocket, no inbound port)"
+)
+
+func defaultSpoolDir() string {
+	if programData := os.Getenv("ProgramData"); programData != "" {
+		return filepath.Join(programData, "OpsHubAgent")
+	}
+	return `C:\ProgramData\OpsHubAgent`
+}
+
+func machineID() string {
+	key, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Cryptography`, registry.QUERY_VALUE)
+	if err == nil {
+		defer key.Close()
+		if value, _, err := key.GetStringValue("MachineGuid"); err == nil && value != "" {
+			return value
+		}
+	}
+	hostname, _ := os.Hostname()
+	return hostname + "-" + firstMAC()
+}
+
+func firstMAC() string {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return "no-mac"
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagLoopback == 0 && iface.HardwareAddr.String() != "" {
+			return iface.HardwareAddr.String()
+		}
+	}
+	return "no-mac"
+}
+
+func fileIDOf(path string, info os.FileInfo) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return strconv.FormatInt(info.ModTime().UnixNano(), 10)
+	}
+	defer f.Close()
+	var data windows.ByHandleFileInformation
+	if err := windows.GetFileInformationByHandle(windows.Handle(f.Fd()), &data); err != nil {
+		return strconv.FormatInt(info.ModTime().UnixNano(), 10)
+	}
+	return fmt.Sprintf("%d:%d:%d", data.VolumeSerialNumber, data.FileIndexHigh, data.FileIndexLow)
+}
+
+func killTree(pid int) {
+	if pid <= 0 {
+		return
+	}
+	_ = exec.Command("taskkill", "/PID", strconv.Itoa(pid), "/T", "/F").Run()
+	if process, err := os.FindProcess(pid); err == nil {
+		_ = process.Kill()
+	}
+}
+
+func configureProcess(_ *exec.Cmd) {
+	// Windows 下用 taskkill /T 杀进程树；不需要额外 SysProcAttr。
+}
+
+func currentUserName() string {
+	if user := os.Getenv("USERNAME"); user != "" {
+		return user
+	}
+	return ""
+}
+
+func isServiceMode() bool {
+	ok, err := svc.IsWindowsService()
+	return err == nil && ok
+}
+
+func runService(configPath string) error {
+	return svc.Run(serviceName, &serviceHandler{configPath: configPath})
+}
+
+type serviceHandler struct {
+	configPath string
+}
+
+func (h *serviceHandler) Execute(_ []string, requests <-chan svc.ChangeRequest, changes chan<- svc.Status) (bool, uint32) {
+	changes <- svc.Status{State: svc.StartPending}
+	cfg, err := LoadConfig(h.configPath)
+	if err != nil {
+		changes <- svc.Status{State: svc.Stopped}
+		return false, 1
+	}
+	logger := NewLogger(cfg)
+	agent := NewAgent(cfg, logger)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		agent.Run(ctx)
+		close(done)
+	}()
+	changes <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
+	for request := range requests {
+		switch request.Cmd {
+		case svc.Interrogate:
+			changes <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
+		case svc.Stop, svc.Shutdown:
+			changes <- svc.Status{State: svc.StopPending}
+			cancel()
+			select {
+			case <-done:
+			case <-time.After(15 * time.Second):
+				logger.Warnf("等待 agent 退出超时")
+			}
+			logger.Close()
+			return false, 0
+		}
+	}
+	cancel()
+	<-done
+	logger.Close()
+	return false, 0
+}
+
+func installService(configPath string) error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	absConfig, err := filepath.Abs(configPath)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(absConfig); err != nil {
+		return fmt.Errorf("配置文件不存在: %s", absConfig)
+	}
+	manager, err := mgr.Connect()
+	if err != nil {
+		return fmt.Errorf("连接服务管理器失败（请用管理员运行）: %w", err)
+	}
+	defer manager.Disconnect()
+	if existing, err := manager.OpenService(serviceName); err == nil {
+		existing.Close()
+		return fmt.Errorf("服务 %s 已存在，请先 uninstall", serviceName)
+	}
+	service, err := manager.CreateService(
+		serviceName,
+		exe,
+		mgr.Config{
+			DisplayName: serviceDisplayName,
+			Description: serviceDescription,
+			StartType:   mgr.StartAutomatic,
+		},
+		"run", "--config", absConfig,
+	)
+	if err != nil {
+		return fmt.Errorf("创建服务失败: %w", err)
+	}
+	defer service.Close()
+	if err := service.Start(); err != nil {
+		return fmt.Errorf("启动服务失败: %w", err)
+	}
+	fmt.Printf("服务 %s 已安装并启动\n", serviceName)
+	return nil
+}
+
+func uninstallService() error {
+	manager, err := mgr.Connect()
+	if err != nil {
+		return fmt.Errorf("连接服务管理器失败（请用管理员运行）: %w", err)
+	}
+	defer manager.Disconnect()
+	service, err := manager.OpenService(serviceName)
+	if err != nil {
+		return fmt.Errorf("打开服务失败: %w", err)
+	}
+	defer service.Close()
+	_, _ = service.Control(svc.Stop)
+	time.Sleep(time.Second)
+	if err := service.Delete(); err != nil {
+		return fmt.Errorf("删除服务失败: %w", err)
+	}
+	fmt.Printf("服务 %s 已卸载\n", serviceName)
+	return nil
+}

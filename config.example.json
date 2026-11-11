@@ -1,0 +1,41 @@
+{
+  "hub": {
+    "host": "0.0.0.0",
+    "port": 7100,
+    "publicUrl": "wss://ops.example.com/agent",
+    "dataDir": "./data",
+    "heartbeatIntervalSec": 15,
+    "heartbeatTimeoutSec": 45,
+    "maxClients": 2000,
+    "logLevel": "info"
+  },
+  "auth": {
+    "enrollmentToken": "change-me-enrollment-token",
+    "mcpToken": "change-me-mcp-token",
+    "adminToken": "change-me-admin-token"
+  },
+  "limits": {
+    "maxConcurrentJobsPerClient": 4,
+    "maxOutputBytesPerJob": 52428800,
+    "maxChunkBytes": 262144,
+    "maxFileBytes": 2147483648,
+    "maxReadBytes": 262144,
+    "maxTailLines": 1000,
+    "maxSearchMatches": 200,
+    "jobTimeoutMs": 86400000,
+    "spoolQuotaBytes": 10737418240
+  },
+  "security": {
+    "allowedUploadRoots": ["./data/staging"],
+    "requireApprovalForDangerous": true,
+    "dangerousPatterns": [
+      "format ",
+      "diskpart",
+      "bcdedit",
+      "shutdown",
+      "rm -rf /",
+      "del /f /s /q c:\\",
+      "rd /s /q c:\\"
+    ]
+  }
+}

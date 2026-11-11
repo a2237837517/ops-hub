@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ops Hub Ops Hub</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="login" class="login hidden">
+    <form id="login-form" class="login-card">
+      <h1>Ops Hub Ops Hub</h1>
+      <p>输入管理 Token 登录</p>
+      <input id="login-token" type="password" placeholder="admin token" autocomplete="current-password" />
+      <button type="submit">登录</button>
+      <div id="login-error" class="error"></div>
+    </form>
+  </div>
+
+  <div id="app" class="app hidden">
+    <header class="topbar">
+      <div class="brand">Ops Hub Ops Hub</div>
+      <div class="top-actions">
+        <span id="hub-status" class="muted">连接中...</span>
+        <button id="refresh-btn" class="ghost">刷新</button>
+        <button id="logout-btn" class="ghost">退出</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="sidebar-head">
+          <input id="client-search" placeholder="搜索客户端..." />
+          <select id="client-status">
+            <option value="">全部</option>
+            <option value="online">在线</option>
+            <option value="offline">离线</option>
+          </select>
+        </div>
+        <div id="client-list" class="client-list"></div>
+      </aside>
+
+      <main class="main">
+        <div id="empty" class="empty">
+          <h2>选择左侧客户端</h2>
+          <p>通过 MCP 或本页面执行命令、传文件、滚动查看日志。</p>
+        </div>
+
+        <div id="client-view" class="hidden">
+          <section class="client-head">
+            <div>
+              <h2 id="client-name">-</h2>
+              <div id="client-meta" class="muted">-</div>
+            </div>
+            <div class="client-head-actions">
+              <span id="client-badge" class="badge">offline</span>
+              <button id="refresh-client-btn" class="ghost">刷新信息</button>
+              <button id="delete-client-btn" class="ghost danger">删除</button>
+            </div>
+          </section>
+
+          <nav class="tabs">
+            <button data-tab="terminal" class="tab active">终端</button>
+            <button data-tab="files" class="tab">文件</button>
+            <button data-tab="jobs" class="tab">任务</button>
+            <button data-tab="audit" class="tab">审计</button>
+          </nav>
+
+          <section id="tab-terminal" class="tab-panel">
+            <div class="terminal-controls">
+              <select id="shell-select">
+                <option value="">自动</option>
+                <option value="cmd">cmd</option>
+                <option value="powershell">powershell</option>
+                <option value="bash">bash</option>
+                <option value="sh">sh</option>
+              </select>
+              <input id="cwd-input" placeholder="工作目录（可选）" />
+              <label class="check"><input id="approve-dangerous" type="checkbox" /> 允许高危</label>
+            </div>
+            <div class="command-row">
+              <input id="command-input" placeholder="输入命令，回车执行" autocomplete="off" />
+              <button id="run-btn">执行</button>
+              <button id="cancel-btn" class="danger" disabled>终止</button>
+            </div>
+            <pre id="terminal-output" class="terminal-output"></pre>
+            <div id="job-info" class="muted"></div>
+          </section>
+
+          <section id="tab-files" class="tab-panel hidden">
+            <div class="file-controls">
+              <input id="file-path" placeholder="客户端路径，如 C:\ 或 /var/log" />
+              <input id="file-pattern" placeholder="*.log（可选）" />
+              <button id="file-list-btn">列出</button>
+              <label class="upload-btn">上传<input id="file-upload" type="file" hidden /></label>
+            </div>
+            <div class="file-layout">
+              <div id="file-list" class="file-list"></div>
+              <div class="file-preview">
+                <div class="file-preview-head">
+                  <span id="file-selected" class="muted">未选择文件</span>
+                  <span>
+                    <button id="file-tail-btn" class="ghost" disabled>看最后 200 行</button>
+                    <button id="file-download-btn" class="ghost" disabled>下载</button>
+                  </span>
+                </div>
+                <pre id="file-output" class="terminal-output small"></pre>
+              </div>
+            </div>
+          </section>
+
+          <section id="tab-jobs" class="tab-panel hidden">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>任务</th><th>命令</th><th>状态</th><th>退出码</th><th>开始</th><th>操作</th></tr></thead>
+                <tbody id="jobs-body"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="tab-audit" class="tab-panel hidden">
+            <pre id="audit-output" class="terminal-output small"></pre>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

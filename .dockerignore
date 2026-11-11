@@ -1,0 +1,9 @@
+node_modules
+data
+dist
+config.local.json
+agent
+tests
+docs
+deploy
+public/.DS_Store

@@ -1,0 +1,130 @@
+# Ops Hub Non-Commercial Source-Available License 1.0
+
+Copyright (c) 2026 **jijiawei**
+
+https://github.com/a2237837517/ops-hub
+
+This license applies to the software, source code, documentation, configuration
+examples, and related files in this repository (the "Software").
+
+By using, copying, modifying, or distributing the Software, you agree to this
+license. If you do not agree, do not use the Software.
+
+## 1. Grant
+
+Subject to the terms of this license, the author grants you a non-exclusive,
+worldwide, royalty-free, non-transferable license to:
+
+- use the Software for **Non-Commercial Purposes**;
+- copy and modify the Software for Non-Commercial Purposes;
+- distribute copies or modified versions for Non-Commercial Purposes, provided
+  that you include this license and clearly mark your changes.
+
+## 2. Non-Commercial Use Only
+
+**Commercial use is prohibited without prior written permission from the author.**
+
+"Non-Commercial Purposes" means personal use, private study, education,
+research, evaluation, and internal non-production testing, where the use is not
+primarily intended for or directed toward commercial advantage or monetary
+compensation.
+
+"Commercial Use" includes, without limitation:
+
+- using the Software in production for a company, government body, or other
+  organization's business operations;
+- selling, reselling, licensing, renting, or sublicensing the Software;
+- providing the Software or a service based on it to customers for a fee;
+- bundling the Software into a commercial product or paid service;
+- using the Software to provide managed services, remote administration, or
+  support to third parties for compensation;
+- using the Software primarily to generate revenue or commercial advantage.
+
+For a commercial license, contact the author through GitHub:
+https://github.com/a2237837517
+
+## 3. Authorized Use Only
+
+The Software includes remote command execution and file transfer capabilities.
+You may use it only on devices and systems that you own or that you have
+**explicit written authorization** to manage.
+
+You must not use the Software for:
+
+- unauthorized access to computers, accounts, networks, or data;
+- covert surveillance, stalking, harassment, or monitoring people without
+  informed consent;
+- malware, ransomware, persistence, or destructive activity;
+- bypassing security controls, license checks, or access restrictions;
+- violating privacy, computer-misuse, export-control, or other applicable laws;
+- violating customer contracts, data-processing agreements, or security policies.
+
+You are solely responsible for obtaining authorization, complying with all
+applicable laws and regulations, and protecting any data accessed through the
+Software.
+
+## 4. Attribution
+
+Any distribution of the Software or a modified version must retain:
+
+- this license file;
+- the copyright notice;
+- a clear attribution to **jijiawei** and the original repository.
+
+You may not use the author's name or the project name to endorse or promote
+modified versions without permission.
+
+## 5. No Warranty
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT.
+
+The author does not warrant that the Software is error-free, secure, or suitable
+for any particular use. You are responsible for testing, securing, and backing up
+your systems.
+
+## 6. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE AUTHOR SHALL NOT BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR
+PUNITIVE DAMAGES, OR FOR ANY LOSS OF DATA, PROFITS, REVENUE, BUSINESS, OR
+GOODWILL, ARISING OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE, EVEN IF
+THE AUTHOR HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+## 7. Indemnity
+
+You agree to indemnify, defend, and hold harmless the author from any claims,
+damages, liabilities, costs, and expenses (including reasonable legal fees)
+arising from your use, distribution, or misuse of the Software, or your violation
+of this license or applicable law.
+
+## 8. Termination
+
+This license terminates automatically if you breach any term. On termination,
+you must stop using and distributing the Software and delete or destroy copies
+in your possession, except where retention is required by law. Sections 2, 3, 4,
+5, 6, 7, and 9 survive termination.
+
+## 9. General
+
+- This license is not an OSI-approved open-source license because it restricts
+  commercial use.
+- If any provision is held unenforceable, the remaining provisions remain in
+  effect.
+- This license is the entire agreement regarding the Software and supersedes any
+  prior understanding on the same subject.
+- Nothing in this license grants rights to any third-party trademarks, services,
+  or data.
+
+---
+
+## 中文摘要（仅供理解，以英文条款为准）
+
+- 允许个人学习、研究、评估和非生产测试使用。
+- **禁止任何形式的商业使用**，包括公司生产环境、收费服务、SaaS、商业产品集成、代维收费等；商业授权需联系作者。
+- 只能用于你拥有或获得明确书面授权的设备。
+- 禁止用于未授权访问、监视、恶意软件、绕过安全控制或任何违法行为。
+- 必须保留版权、作者署名和本协议。
+- 软件按“现状”提供，不提供担保；作者不对使用造成的损失或法律纠纷负责。
+- 使用者需自行遵守当地法律、客户合同和数据保护要求。

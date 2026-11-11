@@ -1,0 +1,12 @@
+node_modules/
+data/
+dist/
+logs/
+tmp/
+output/
+config.local.json
+agent/config.local.json
+agent/agent-state.json
+*.log
+.DS_Store
+coverage/

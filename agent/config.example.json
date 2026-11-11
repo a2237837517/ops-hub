@@ -1,0 +1,16 @@
+{
+  "server": "wss://ops.example.com/agent",
+  "enrollmentToken": "change-me-enrollment-token",
+  "agentToken": "",
+  "clientId": "",
+  "name": "",
+  "tags": [],
+  "spoolDir": "",
+  "allowedRoots": [],
+  "maxSpoolMB": 2048,
+  "maxConcurrentJobs": 4,
+  "insecureSkipVerify": false,
+  "caFile": "",
+  "proxy": "",
+  "heartbeatIntervalSec": 15
+}
