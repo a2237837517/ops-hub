@@ -7,15 +7,18 @@ import { AgentGateway } from './agent-gateway.js';
 import { JobManager } from './job-manager.js';
 import { FileManager } from './file-manager.js';
 import { TunnelGateway } from './tunnel-gateway.js';
+import { Socks5Server } from './socks5-server.js';
+import { applyRuntimeSettings, saveRuntimeSettings } from './runtime-settings.js';
 import { loadManifest, requestUpgrade } from './upgrade.js';
 import { appendChunk, cleanupStaleUploads, completeUpload, createUpload } from './resumable-upload.js';
 import { Store } from '../store.js';
 import { createMcpRouter } from '../mcp/server.js';
 import { cleanupAgentPackages, privatePackageFile } from './agent-package.js';
 import { PROJECT_ROOT } from '../config/index.js';
-import { Logger, randomId, nowIso, clamp } from '../utils.js';
+import { Logger, randomId, nowIso, clamp, randomToken } from '../utils.js';
 
 export async function startHub(config) {
+  applyRuntimeSettings(config);
   const logger = new Logger({
     level: config.hub.logLevel,
     file: path.join(config.hub.dataDir, 'logs', 'hub.log'),
@@ -45,6 +48,14 @@ export async function startHub(config) {
   const jobs = new JobManager({ gateway, store, config, logger });
   const files = new FileManager({ gateway, store, config, logger });
   const tunnels = new TunnelGateway({ httpServer: server, config, store, logger, agentGateway: gateway });
+  const socks5 = new Socks5Server({ config, store, logger, agentGateway: gateway, tunnelGateway: tunnels });
+  if (config.socks5?.enabled) {
+    try {
+      socks5.start();
+    } catch (error) {
+      logger.error(`SOCKS5 启动失败: ${error.message}`);
+    }
+  }
 
   const adminAuth = (req, res, next) => {
     const header = String(req.get('authorization') || '');
@@ -157,6 +168,97 @@ export async function startHub(config) {
       return res.status(status).json({ success: false, message: result.error });
     }
     res.json({ success: true, ...result });
+  });
+
+  const socks5Info = () => ({
+    ...socks5.status(),
+    publicHost: config.socks5.publicHost || '',
+    token: config.socks5.token || '',
+    maxStreamsPerClient: Number(config.socks5.maxStreamsPerClient) || 16,
+    idleTimeoutSec: Number(config.socks5.idleTimeoutSec) || 1800,
+    clients: store
+      .listAgents()
+      .filter((agent) => gateway.getConnection(agent.id))
+      .map((agent) => ({
+        id: agent.id,
+        name: agent.displayName || agent.name || agent.hostname || agent.id,
+      })),
+  });
+
+  app.get('/api/socks5', (_req, res) => {
+    res.json({ success: true, socks5: socks5Info() });
+  });
+
+  app.post('/api/socks5/enable', (req, res) => {
+    try {
+      if (!config.socks5.token) config.socks5.token = randomToken(32);
+      config.socks5.enabled = true;
+      if (config.socks5.enabled && socks5.status().enabled) socks5.stop();
+      socks5.start();
+      saveRuntimeSettings(config);
+      store.audit('socks5.enable', { host: config.socks5.host, port: config.socks5.port });
+      res.json({ success: true, socks5: socks5Info() });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  });
+
+  app.post('/api/socks5/disable', (_req, res) => {
+    config.socks5.enabled = false;
+    socks5.stop();
+    saveRuntimeSettings(config);
+    res.json({ success: true, socks5: socks5Info() });
+  });
+
+  app.post('/api/socks5/token', (_req, res) => {
+    config.socks5.token = randomToken(32);
+    saveRuntimeSettings(config);
+    store.audit('socks5.token.rotate', {});
+    res.json({ success: true, socks5: socks5Info() });
+  });
+
+  app.put('/api/socks5', (req, res) => {
+    const body = req.body || {};
+    const next = { ...config.socks5 };
+    try {
+      if (body.publicHost !== undefined) next.publicHost = String(body.publicHost || '').trim();
+      if (body.host !== undefined) next.host = String(body.host || '0.0.0.0').trim();
+      if (body.port !== undefined) {
+        const port = Number(body.port);
+        if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error('端口无效');
+        next.port = port;
+      }
+      if (body.token !== undefined) {
+        const token = String(body.token || '').trim();
+        if (token.length < 16) throw new Error('token 至少 16 个字符');
+        next.token = token;
+      }
+      if (body.maxStreamsPerClient !== undefined) {
+        const value = Number(body.maxStreamsPerClient);
+        if (!Number.isInteger(value) || value < 1 || value > 128) throw new Error('最大流数 1-128');
+        next.maxStreamsPerClient = value;
+      }
+      if (body.idleTimeoutSec !== undefined) {
+        const value = Number(body.idleTimeoutSec);
+        if (!Number.isInteger(value) || value < 60 || value > 86400) throw new Error('空闲超时 60-86400 秒');
+        next.idleTimeoutSec = value;
+      }
+      if (typeof body.enabled === 'boolean') next.enabled = body.enabled;
+      const changed = JSON.stringify(next) !== JSON.stringify(config.socks5);
+      if (changed && socks5.status().enabled) socks5.stop();
+      config.socks5 = next;
+      if (config.socks5.enabled) socks5.start();
+      saveRuntimeSettings(config);
+      store.audit('socks5.settings.update', {
+        host: next.host,
+        port: next.port,
+        publicHost: next.publicHost,
+        enabled: next.enabled,
+      });
+      res.json({ success: true, socks5: socks5Info() });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
   });
 
   app.get('/api/tunnels', (req, res) => {
@@ -535,7 +637,7 @@ export async function startHub(config) {
   });
 
   // MCP endpoint
-  app.use(createMcpRouter({ config, gateway, jobs, files, store, logger, tunnels }));
+  app.use(createMcpRouter({ config, gateway, jobs, files, store, logger, tunnels, socks5 }));
 
   // 静态管理界面
   app.use(express.static(path.join(PROJECT_ROOT, 'public'), { index: 'index.html' }));
@@ -605,6 +707,7 @@ export async function startHub(config) {
     clearInterval(packageCleanupTimer);
     clearInterval(uploadCleanupTimer);
     logger.info('shutting down...');
+    socks5.stop();
     tunnels.shutdown();
     gateway.close();
     store.close();
@@ -627,6 +730,7 @@ export async function startHub(config) {
     jobs,
     files,
     tunnels,
+    socks5,
     logger,
     close,
     address,

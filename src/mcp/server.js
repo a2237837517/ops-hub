@@ -4,7 +4,8 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod';
 import { requestUpgrade } from '../hub/upgrade.js';
 import { JOB_STATUS } from '../protocol.js';
-import { truncateUtf8 } from '../utils.js';
+import { randomToken, truncateUtf8 } from '../utils.js';
+import { saveRuntimeSettings } from '../hub/runtime-settings.js';
 import { createAgentPackage, publicBaseUrl } from '../hub/agent-package.js';
 
 const SERVER_NAME = 'ops-hub';
@@ -63,7 +64,7 @@ function formatJobOutput(result, maxBytes = 64 * 1024) {
   return `${header}\n\n${text}${footer}`;
 }
 
-export function createMcpRouter({ config, gateway, jobs, files, store, logger, tunnels }) {
+export function createMcpRouter({ config, gateway, jobs, files, store, logger, tunnels, socks5 }) {
   const router = express.Router();
 
   const auth = (req, res, next) => {
@@ -244,6 +245,88 @@ function createMcpServer({ config, gateway, jobs, files, store, logger }) {
         const ok = tunnels.close(id);
         if (!ok) throw new Error('tunnel not found');
         return textResult({ success: true, id });
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'ops_socks_enable',
+    {
+      title: '开启 SOCKS5 代理',
+      description:
+        '在 Hub 上开启 SOCKS5 服务，返回 host、port、用户名（clientId）和密码。Clash/浏览器可直接使用，被控端不需要任何操作。',
+      inputSchema: {
+        clientId: z.string().optional().describe('要使用的客户端 ID 或名称；不填则返回所有在线 clientId'),
+      },
+    },
+    async ({ clientId }) => {
+      try {
+        const agent = clientId ? store.findAgent(clientId) : null;
+        if (clientId && !agent) throw new Error('client not found');
+        if (!config.socks5.token) config.socks5.token = randomToken(32);
+        config.socks5.enabled = true;
+        if (socks5.status().enabled) socks5.stop();
+        socks5.start();
+        saveRuntimeSettings(config);
+        const clients = store
+          .listAgents()
+          .filter((item) => gateway.getConnection(item.id))
+          .map((item) => ({ clientId: item.id, name: item.displayName || item.name || item.hostname || item.id }));
+        return textResult({
+          enabled: true,
+          host: config.socks5.publicHost || config.socks5.host,
+          port: Number(config.socks5.port),
+          username: agent ? agent.id : '从 clients 里选一个 clientId',
+          password: config.socks5.token,
+          clients,
+        });
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'ops_socks_disable',
+    {
+      title: '关闭 SOCKS5 代理',
+      description: '关闭 Hub 上的 SOCKS5 服务，断开现有代理连接。',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        config.socks5.enabled = false;
+        socks5.stop();
+        saveRuntimeSettings(config);
+        return textResult({ enabled: false });
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'ops_socks_status',
+    {
+      title: 'SOCKS5 代理状态',
+      description: '查看 SOCKS5 是否开启、host/port、密码和在线客户端用户名。',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const clients = store
+          .listAgents()
+          .filter((item) => gateway.getConnection(item.id))
+          .map((item) => ({ clientId: item.id, name: item.displayName || item.name || item.hostname || item.id }));
+        return textResult({
+          ...socks5.status(),
+          host: config.socks5.publicHost || config.socks5.host,
+          port: Number(config.socks5.port),
+          password: config.socks5.token,
+          clients,
+        });
       } catch (error) {
         return errorResult(error);
       }

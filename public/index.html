@@ -23,6 +23,7 @@
       <div class="top-actions">
         <span id="hub-status" class="muted">连接中...</span>
         <button id="downloads-btn" class="ghost">下载客户端</button>
+        <button id="socks5-btn" class="ghost">SOCKS5</button>
         <button id="revoked-btn" class="ghost">封禁管理</button>
         <button id="refresh-btn" class="ghost">刷新</button>
         <button id="logout-btn" class="ghost">退出</button>
@@ -238,6 +239,40 @@
           </section>
         </div>
       </main>
+    </div>
+  </div>
+
+  <div id="socks5-backdrop" class="dialog-backdrop hidden">
+    <div class="dialog-card socks5-card" role="dialog" aria-modal="true" aria-labelledby="socks5-title">
+      <div class="dialog-icon">⇄</div>
+      <h3 id="socks5-title">SOCKS5 代理</h3>
+      <p class="dialog-message muted">开启后 Clash / 浏览器可以直接使用；被控端不需要安装任何东西。</p>
+      <div class="socks5-status">
+        <span id="socks5-state" class="badge">off</span>
+        <button id="socks5-toggle" class="primary-btn">启用</button>
+        <button id="socks5-rotate" class="ghost">重置密码</button>
+      </div>
+      <p class="socks5-hint muted">外部连不上时，请在阿里云安全组放行 1080（建议只放行你的出口 IP）。修改端口后需要同步调整容器端口映射。</p>
+      <div class="socks5-fields">
+        <label>公网 Host<input id="socks5-host" placeholder="例如 118.31.73.50" /></label>
+        <label>Port<input id="socks5-port" type="number" min="1" max="65535" /></label>
+        <label>最大流数<input id="socks5-max" type="number" min="1" max="128" /></label>
+        <label>空闲超时（秒）<input id="socks5-idle" type="number" min="60" max="86400" /></label>
+      </div>
+      <div class="socks5-cred">
+        <label>用户名（clientId）<input id="socks5-user" readonly /></label>
+        <label>密码<input id="socks5-pass" type="password" readonly /></label>
+      </div>
+      <div class="socks5-clients">
+        <h4>在线客户端（点一下切换用户名）</h4>
+        <div id="socks5-client-list" class="socks5-client-list muted">加载中...</div>
+      </div>
+      <pre id="socks5-yaml" class="tunnel-command"></pre>
+      <div class="socks5-yaml-actions"><button id="socks5-copy" class="ghost">复制配置</button></div>
+      <div class="dialog-actions">
+        <button id="socks5-save" class="dialog-btn primary">保存设置</button>
+        <button id="socks5-close" class="dialog-btn ghost">关闭</button>
+      </div>
     </div>
   </div>
 

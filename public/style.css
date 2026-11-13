@@ -690,3 +690,28 @@ td.command { max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
   border-bottom: 1px solid var(--border);
 }
 .tunnel-item:last-child { border-bottom: none; }
+
+/* SOCKS5 */
+.socks5-card { width: min(760px, 100%); }
+.socks5-status { display: flex; align-items: center; gap: 8px; margin: 4px 0 14px; }
+.socks5-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.socks5-fields label, .socks5-cred label {
+  display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted);
+}
+.socks5-fields input, .socks5-cred input { width: 100%; }
+.socks5-cred { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.socks5-hint { font-size: 12px; margin: -4px 0 12px; line-height: 1.5; }
+.socks5-yaml-actions { display: flex; justify-content: flex-end; margin-top: -6px; margin-bottom: 12px; }
+.socks5-clients { margin-bottom: 12px; }
+.socks5-clients h4 { margin: 0 0 6px; font-size: 13px; }
+.socks5-client-list {
+  max-height: 120px; overflow: auto; font-size: 12px;
+  border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px;
+}
+.socks5-client {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 6px 0; border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.socks5-client:last-child { border-bottom: none; }
+.socks5-client:hover { color: var(--text); }
+.socks5-client.active { color: var(--accent); }

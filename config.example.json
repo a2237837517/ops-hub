@@ -53,5 +53,14 @@
     "allowedPorts": [],
     "maxStreamsPerTunnel": 16,
     "idleTimeoutSec": 1800
+  },
+  "socks5": {
+    "enabled": false,
+    "host": "0.0.0.0",
+    "port": 1080,
+    "token": "",
+    "publicHost": "",
+    "maxStreamsPerClient": 16,
+    "idleTimeoutSec": 1800
   }
 }

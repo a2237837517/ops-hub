@@ -15,6 +15,8 @@ export class AgentGateway extends EventEmitter {
     this.connections = new Map(); // clientId -> connection
     this.pendingRpc = new Map(); // requestId -> { resolve, reject, timer, clientId }
     this.helloTimers = new Map(); // ws -> timer
+    this.streamIds = new Set();
+    this.nextStreamId = 1;
     this.wss = new WebSocketServer({
       noServer: true,
       maxPayload: Math.max(16 * 1024 * 1024, Number(config.limits.maxChunkBytes) * 8 || 0),
@@ -414,6 +416,22 @@ export class AgentGateway extends EventEmitter {
     } catch {
       return false;
     }
+  }
+
+  allocStreamId() {
+    for (let i = 0; i < 10000; i += 1) {
+      const id = this.nextStreamId;
+      this.nextStreamId = this.nextStreamId >= 0xffffffff ? 1 : this.nextStreamId + 1;
+      if (!this.streamIds.has(id)) {
+        this.streamIds.add(id);
+        return id;
+      }
+    }
+    return 0;
+  }
+
+  releaseStreamId(id) {
+    this.streamIds.delete(id);
   }
 
   sendStream(clientId, payload) {

@@ -138,12 +138,7 @@ export class TunnelGateway {
   }
 
   _nextStreamId() {
-    for (let i = 0; i < 100; i += 1) {
-      const id = this.nextStreamId;
-      this.nextStreamId = this.nextStreamId >= MAX_STREAM_ID ? 1 : this.nextStreamId + 1;
-      if (!this.streamsByGlobalId.has(id)) return id;
-    }
-    return 0;
+    return this.agentGateway.allocStreamId();
   }
 
   async _onTunnelFrame(tunnel, raw) {
@@ -286,6 +281,7 @@ export class TunnelGateway {
     const { tunnel } = entry;
     tunnel.streams.delete(entry.localId);
     this.streamsByGlobalId.delete(entry.globalId);
+    this.agentGateway.releaseStreamId(entry.globalId);
     if (notifyAgent) {
       this.agentGateway.sendStream(
         tunnel.clientId,
@@ -378,6 +374,10 @@ export class TunnelGateway {
         this._closeTunnel(tunnel, 'idle timeout');
       }
     }
+  }
+
+  validateTarget(host, port) {
+    return this._validateTarget(host, port);
   }
 
   async _validateTarget(host, port) {

@@ -21,6 +21,15 @@ const DEFAULTS = {
     mcpToken: 'change-me-mcp-token',
     adminToken: 'change-me-admin-token',
   },
+  socks5: {
+    enabled: false,
+    host: '0.0.0.0',
+    port: 1080,
+    token: '',
+    publicHost: '',
+    maxStreamsPerClient: 16,
+    idleTimeoutSec: 1800,
+  },
   tunnel: {
     // 默认关闭：tunnelToken 一旦泄露等于内网入口泄露，必须由管理员显式开启并设置随机 token。
     enabled: false,

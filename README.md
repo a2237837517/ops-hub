@@ -67,7 +67,7 @@ GitHub topics are configured on the repository page. The project is designed to 
 - Command jobs with on-disk spool, incremental output, byte offsets, timeout, cancel, and process-tree termination
 - Chunked file upload/download with SHA-256 and atomic writes; browser uploads above 8MB are split into 8MB parts with retry and resume
 - MCP server over **Streamable HTTP** (and legacy-compatible JSON-RPC behavior)
-- 22 MCP tools covering inventory, command execution, files, logs, search, tunnels, and upgrades
+- 25 MCP tools covering inventory, command execution, files, logs, search, tunnels, SOCKS5, and upgrades
 - Web admin UI: clients, terminal, files, jobs, audit
 - Client list grouped by customer name (`config.json` → `name`), with per-machine status inside each group
 - Rename clients (Hub display name) and view OS/IP/CPU/memory/disk info
@@ -389,6 +389,47 @@ allowlist. UDP is not supported.
 The admin UI has a **端口转发** dialog that generates the command and lists
 active tunnels. MCP tools: `ops_tunnel_command`, `ops_tunnel_list`,
 `ops_tunnel_close`.
+
+---
+
+## SOCKS5 Proxy (server-side)
+
+The Hub can expose a SOCKS5 endpoint that routes through any online Agent. The
+managed machines do **nothing**; they already hold the outbound WebSocket.
+
+Enable it in the admin UI (**SOCKS5**) or with `ops_socks_enable`. The Hub
+returns:
+
+```text
+host:     118.31.73.50
+port:     1080
+username: <clientId>
+password: <socks5 token>
+```
+
+Clash / browser:
+
+```yaml
+proxies:
+  - name: ops-185
+    type: socks5
+    server: 118.31.73.50
+    port: 1080
+    username: DESKTOP-FCUE0HS-336ac8d717
+    password: "<token>"
+    udp: false
+```
+
+- Username selects the target Agent (`clientId` or registered name)
+- Password is `socks5.token`, separate from the tunnel token
+- Targets are restricted by `tunnel.allowedCidrs` / `tunnel.allowedPorts`
+- TCP only (`udp: false`); idle timeout and per-client stream limits apply
+- The listener is configured by `socks5.host/port`; publish the port and open it
+  in the cloud security group (ideally only to your egress IP)
+- Plain SOCKS5 has no TLS; use it over VPN/SSH, or keep the source IP allowlist tight
+- Settings are persisted to `data/settings.json` and survive Hub restarts
+
+MCP tools: `ops_socks_enable`, `ops_socks_disable`, `ops_socks_status`.
 
 ---
 

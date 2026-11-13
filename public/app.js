@@ -3,6 +3,8 @@
     token: localStorage.getItem('ops-hub-token') || '',
     clients: [],
     latestVersion: '',
+    socks5: null,
+    socks5User: '',
     selected: null,
     view: 'clients',
     currentJob: null,
@@ -129,6 +131,11 @@
   });
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
+    if (!$('socks5-backdrop').classList.contains('hidden')) {
+      event.preventDefault();
+      $('socks5-backdrop').classList.add('hidden');
+      return;
+    }
     if (!$('tunnel-backdrop').classList.contains('hidden')) {
       event.preventDefault();
       hideTunnel();
@@ -669,6 +676,119 @@
     renderClients();
   }
 
+  function renderSocks5Yaml() {
+    const host = $('socks5-host').value.trim() || '<公网IP>';
+    const port = $('socks5-port').value || '1080';
+    const user = state.socks5User || '<clientId>';
+    const pass = $('socks5-pass').value || '<密码>';
+    $('socks5-yaml').textContent = `proxies:
+  - name: ops-${user}
+    type: socks5
+    server: ${host}
+    port: ${port}
+    username: ${user}
+    password: "${pass}"
+    udp: false`;
+  }
+
+  function renderSocks5(data) {
+    const info = data.socks5 || data || {};
+    state.socks5 = info;
+    const enabled = Boolean(info.enabled);
+    const stateEl = $('socks5-state');
+    stateEl.textContent = enabled ? 'running' : 'stopped';
+    stateEl.className = `badge ${enabled ? 'online' : ''}`;
+    $('socks5-toggle').textContent = enabled ? '停用' : '启用';
+    $('socks5-toggle').className = enabled ? 'ghost danger' : 'primary-btn';
+    const host = String(info.publicHost || info.host || '');
+    $('socks5-host').value = host === '0.0.0.0' ? '' : host;
+    $('socks5-port').value = Number(info.port) || 1080;
+    $('socks5-max').value = Number(info.maxStreamsPerClient) || 16;
+    $('socks5-idle').value = Number(info.idleTimeoutSec) || 1800;
+    $('socks5-pass').value = info.token || '';
+    const clients = info.clients || [];
+    if (!state.socks5User || !clients.some((item) => item.id === state.socks5User)) {
+      state.socks5User = clients[0]?.id || '';
+    }
+    $('socks5-user').value = state.socks5User || '';
+    $('socks5-client-list').innerHTML = clients.length
+      ? clients
+          .map(
+            (item) => `<div class="socks5-client ${item.id === state.socks5User ? 'active' : ''}" data-socks-client="${escapeHtml(item.id)}">
+              <span>${escapeHtml(item.name || item.id)}</span><span class="muted">${escapeHtml(item.id)}</span>
+            </div>`,
+          )
+          .join('')
+      : '<div class="muted">没有在线客户端</div>';
+    for (const row of $('socks5-client-list').querySelectorAll('[data-socks-client]')) {
+      row.addEventListener('click', () => {
+        state.socks5User = row.dataset.socksClient;
+        $('socks5-user').value = state.socks5User;
+        for (const other of $('socks5-client-list').querySelectorAll('.socks5-client')) {
+          other.classList.toggle('active', other.dataset.socksClient === state.socks5User);
+        }
+        renderSocks5Yaml();
+      });
+    }
+    renderSocks5Yaml();
+  }
+
+  async function showSocks5() {
+    $('socks5-backdrop').classList.remove('hidden');
+    $('socks5-client-list').textContent = '加载中...';
+    try {
+      const data = await api('/api/socks5');
+      renderSocks5(data);
+    } catch (error) {
+      $('socks5-client-list').textContent = `加载失败: ${error.message}`;
+    }
+  }
+
+  async function toggleSocks5() {
+    const enabled = Boolean(state.socks5?.enabled);
+    try {
+      const data = await api(`/api/socks5/${enabled ? 'disable' : 'enable'}`, { method: 'POST' });
+      renderSocks5(data);
+    } catch (error) {
+      alert(`操作失败: ${error.message}`);
+    }
+  }
+
+  async function rotateSocks5() {
+    const ok = await openDialog({
+      title: '重置 SOCKS5 密码',
+      message: '重置后所有已配置的 Clash/浏览器都要更新密码。',
+      confirmText: '重置',
+      danger: true,
+      icon: '🔑',
+    });
+    if (!ok) return;
+    try {
+      const data = await api('/api/socks5/token', { method: 'POST' });
+      renderSocks5(data);
+    } catch (error) {
+      alert(`重置失败: ${error.message}`);
+    }
+  }
+
+  async function saveSocks5() {
+    try {
+      const data = await api('/api/socks5', {
+        method: 'PUT',
+        body: JSON.stringify({
+          publicHost: $('socks5-host').value.trim(),
+          port: Number($('socks5-port').value),
+          maxStreamsPerClient: Number($('socks5-max').value),
+          idleTimeoutSec: Number($('socks5-idle').value),
+        }),
+      });
+      renderSocks5(data);
+      alert('已保存。修改端口后需要同步调整容器端口映射。');
+    } catch (error) {
+      alert(`保存失败: ${error.message}`);
+    }
+  }
+
   function renderVersionBadge() {
     const el = $('client-version');
     if (!el) return;
@@ -833,6 +953,26 @@
     }
   });
   $('upgrade-client-btn').addEventListener('click', upgradeClient);
+  $('socks5-btn').addEventListener('click', showSocks5);
+  $('socks5-close').addEventListener('click', () => $('socks5-backdrop').classList.add('hidden'));
+  $('socks5-backdrop').addEventListener('click', (event) => {
+    if (event.target === $('socks5-backdrop')) $('socks5-backdrop').classList.add('hidden');
+  });
+  $('socks5-toggle').addEventListener('click', toggleSocks5);
+  $('socks5-rotate').addEventListener('click', rotateSocks5);
+  $('socks5-save').addEventListener('click', saveSocks5);
+  $('socks5-copy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText($('socks5-yaml').textContent || '');
+      $('socks5-copy').textContent = '已复制';
+      setTimeout(() => { $('socks5-copy').textContent = '复制配置'; }, 1500);
+    } catch {
+      alert('复制失败，请手动选中配置');
+    }
+  });
+  for (const id of ['socks5-host', 'socks5-port']) {
+    $(id).addEventListener('input', renderSocks5Yaml);
+  }
   $('tunnel-btn').addEventListener('click', showTunnel);
   $('tunnel-close').addEventListener('click', hideTunnel);
   $('tunnel-generate').addEventListener('click', generateTunnelCommand);
