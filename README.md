@@ -457,6 +457,9 @@ proxies:
 
 - No security-group change, no new public port, TLS end to end
 - One local port per `--client`; run 1080/1081/... for multiple Agents
+- Or add `--socks5-user-select`: the SOCKS5 username selects the target
+  `clientId`, so **one local listener reaches every Agent**. The password is the
+  tunnel token by default, or `--socks5-pass <password>`
 - Optional local auth: `--socks5-user ops --socks5-pass <password>`
 - Targets are still restricted by `tunnel.allowedCidrs` / `tunnel.allowedPorts`
 

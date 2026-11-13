@@ -296,6 +296,7 @@ export async function startHub(config) {
       ];
       if (user) parts.push(`--socks5-user ${user}`);
       if (pass) parts.push(`--socks5-pass ${pass}`);
+      if (req.body.socks5.userSelect) parts.push('--socks5-user-select');
       return res.json({
         success: true,
         mode: 'socks5',

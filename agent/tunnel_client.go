@@ -90,6 +90,7 @@ func runTunnelClient(args []string) {
 	fs.Var(&socks5Specs, "socks5", "本地 SOCKS5 端口，例如 1080 或 127.0.0.1:1080，可重复")
 	socks5User := fs.String("socks5-user", "", "本地 SOCKS5 用户名（可选）")
 	socks5Pass := fs.String("socks5-pass", "", "本地 SOCKS5 密码（可选）")
+	socks5UserSelect := fs.Bool("socks5-user-select", false, "SOCKS5 用户名作为目标 clientId（一个客户端访问多个 Agent）")
 	_ = fs.Parse(args)
 
 	if *server == "" || *token == "" || *clientID == "" || (len(forwards) == 0 && len(socks5Specs) == 0) {
@@ -118,9 +119,10 @@ func runTunnelClient(args []string) {
 			addr = net.JoinHostPort(*bind, addr)
 		}
 		parsedSocks5 = append(parsedSocks5, socks5Spec{
-			Addr: addr,
-			User: *socks5User,
-			Pass: *socks5Pass,
+			Addr:       addr,
+			User:       *socks5User,
+			Pass:       *socks5Pass,
+			UserSelect: *socks5UserSelect,
 		})
 	}
 
@@ -300,7 +302,7 @@ func (c *tunnelClient) acceptLoop(listener net.Listener, forward tunnelForward) 
 	}
 }
 
-func (c *tunnelClient) openStream(conn net.Conn, host string, port, localPort int) (*localStream, error) {
+func (c *tunnelClient) openStream(conn net.Conn, clientID, host string, port, localPort int) (*localStream, error) {
 	id := atomic.AddUint32(&c.nextID, 1)
 	if id == 0 {
 		id = atomic.AddUint32(&c.nextID, 1)
@@ -327,6 +329,7 @@ func (c *tunnelClient) openStream(conn net.Conn, host string, port, localPort in
 	c.mu.Unlock()
 
 	payload, _ := json.Marshal(streamOpenRequest{
+		ClientID:  clientID,
 		Host:      host,
 		Port:      port,
 		LocalPort: localPort,
@@ -353,7 +356,7 @@ func (c *tunnelClient) openStream(conn net.Conn, host string, port, localPort in
 }
 
 func (c *tunnelClient) handleLocal(conn net.Conn, forward tunnelForward) {
-	stream, err := c.openStream(conn, forward.Host, forward.Port, forward.Local)
+	stream, err := c.openStream(conn, c.clientID, forward.Host, forward.Port, forward.Local)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[tunnel] %s:%d 打开失败: %v\n", forward.Host, forward.Port, err)
 		return
@@ -418,7 +421,7 @@ func (c *tunnelClient) readLoop(conn *websocket.Conn) error {
 				}
 			}
 		case streamClose:
-			c.removeStream(id)
+			c.finishStream(id)
 		}
 	}
 }
@@ -434,6 +437,20 @@ func (c *tunnelClient) resolvePending(id uint32, result tunnelResult) {
 		default:
 		}
 	}
+}
+
+func (c *tunnelClient) finishStream(id uint32) {
+	c.mu.Lock()
+	stream := c.streams[id]
+	delete(c.streams, id)
+	c.mu.Unlock()
+	if stream == nil {
+		return
+	}
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		stream.close()
+	}()
 }
 
 func (c *tunnelClient) removeStream(id uint32) {

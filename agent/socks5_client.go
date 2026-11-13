@@ -9,9 +9,10 @@ import (
 )
 
 type socks5Spec struct {
-	Addr string
-	User string
-	Pass string
+	Addr       string
+	User       string
+	Pass       string
+	UserSelect bool
 }
 
 func (c *tunnelClient) acceptSocks5(listener net.Listener, spec socks5Spec) {
@@ -46,7 +47,7 @@ func (c *tunnelClient) handleSocks5(conn net.Conn, spec socks5Spec) {
 		return
 	}
 
-	needAuth := spec.User != ""
+	needAuth := spec.User != "" || spec.UserSelect
 	method := byte(0)
 	if needAuth {
 		method = 2
@@ -65,6 +66,7 @@ func (c *tunnelClient) handleSocks5(conn net.Conn, spec socks5Spec) {
 	}
 	_, _ = conn.Write([]byte{5, method})
 
+	targetUser := ""
 	if needAuth {
 		var authHead [2]byte
 		if _, err := io.ReadFull(conn, authHead[:]); err != nil {
@@ -80,6 +82,7 @@ func (c *tunnelClient) handleSocks5(conn net.Conn, spec socks5Spec) {
 			_ = conn.Close()
 			return
 		}
+		targetUser = string(username)
 		var passLen [1]byte
 		if _, err := io.ReadFull(conn, passLen[:]); err != nil {
 			_ = conn.Close()
@@ -90,7 +93,22 @@ func (c *tunnelClient) handleSocks5(conn net.Conn, spec socks5Spec) {
 			_ = conn.Close()
 			return
 		}
-		if string(username) != spec.User || string(password) != spec.Pass {
+		if spec.UserSelect {
+			if len(username) == 0 {
+				_, _ = conn.Write([]byte{1, 1})
+				_ = conn.Close()
+				return
+			}
+			expected := spec.Pass
+			if expected == "" {
+				expected = c.token
+			}
+			if string(password) != expected {
+				_, _ = conn.Write([]byte{1, 1})
+				_ = conn.Close()
+				return
+			}
+		} else if string(username) != spec.User || string(password) != spec.Pass {
 			_, _ = conn.Write([]byte{1, 1})
 			_ = conn.Close()
 			return
@@ -151,10 +169,15 @@ func (c *tunnelClient) handleSocks5(conn net.Conn, spec socks5Spec) {
 	port := int(portBuf[0])<<8 | int(portBuf[1])
 
 	_ = conn.SetDeadline(time.Time{})
-	stream, err := c.openStream(conn, host, port, 0)
+	targetClientID := c.clientID
+	if spec.UserSelect {
+		targetClientID = targetUser
+	}
+	stream, err := c.openStream(conn, targetClientID, host, port, 0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[tunnel] SOCKS5 %s:%d 失败: %v\n", host, port, err)
 		socks5Reply(conn, 5)
+		time.Sleep(20 * time.Millisecond)
 		_ = conn.Close()
 		return
 	}

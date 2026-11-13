@@ -154,7 +154,7 @@ export class TunnelGateway {
     if (frame.type === STREAM.DATA) {
       entry.bytesIn += frame.payload.length;
       this.agentGateway.sendStream(
-        tunnel.clientId,
+        entry.clientId,
         encodeStreamFrame(STREAM.DATA, entry.globalId, frame.payload),
       );
     } else if (frame.type === STREAM.CLOSE) {
@@ -178,11 +178,20 @@ export class TunnelGateway {
     }
     const host = String(request.host || '').trim();
     const port = Number(request.port);
+    const targetClientId = String(request.clientId || tunnel.clientId || '').trim();
+    if (!this.agentGateway.getConnection(targetClientId)) {
+      this._sendOpenFail(tunnel, frame.streamId, `agent offline: ${targetClientId}`);
+      return;
+    }
+    if (this.store.isRevoked(targetClientId)) {
+      this._sendOpenFail(tunnel, frame.streamId, `client revoked: ${targetClientId}`);
+      return;
+    }
     const error = await this._validateTarget(host, port);
     if (error) {
       this.store.audit('tunnel.target.denied', {
         tunnelId: tunnel.id,
-        clientId: tunnel.clientId,
+        clientId: targetClientId,
         target: `${host}:${port}`,
         reason: error,
       });
@@ -197,6 +206,7 @@ export class TunnelGateway {
     }
     const entry = {
       tunnel,
+      clientId: targetClientId,
       localId: frame.streamId,
       globalId,
       host,
@@ -212,7 +222,7 @@ export class TunnelGateway {
 
     const payload = Buffer.from(JSON.stringify({ host, port }), 'utf8');
     const ok = this.agentGateway.sendStream(
-      tunnel.clientId,
+      targetClientId,
       encodeStreamFrame(STREAM.OPEN, globalId, payload),
     );
     if (!ok) {
@@ -236,7 +246,7 @@ export class TunnelGateway {
     const frame = decodeStreamFrame(raw);
     if (!frame) return;
     const entry = this.streamsByGlobalId.get(frame.streamId);
-    if (!entry || entry.tunnel.clientId !== clientId) return;
+    if (!entry || entry.clientId !== clientId) return;
     entry.lastActivity = Date.now();
     const { tunnel } = entry;
     if (frame.type === STREAM.OPEN_OK) {
@@ -284,13 +294,13 @@ export class TunnelGateway {
     this.agentGateway.releaseStreamId(entry.globalId);
     if (notifyAgent) {
       this.agentGateway.sendStream(
-        tunnel.clientId,
+        entry.clientId,
         encodeStreamFrame(STREAM.CLOSE, entry.globalId),
       );
     }
     this.store.audit('tunnel.close', {
       tunnelId: tunnel.id,
-      clientId: tunnel.clientId,
+      clientId: entry.clientId,
       target: `${entry.host}:${entry.port}`,
       localPort: entry.localPort,
       bytesIn: entry.bytesIn,
@@ -316,6 +326,15 @@ export class TunnelGateway {
 
   _onAgentOffline(clientId) {
     for (const tunnel of [...this.tunnels.values()]) {
+      for (const entry of [...tunnel.streams.values()]) {
+        if (entry.clientId !== clientId) continue;
+        try {
+          tunnel.ws.send(encodeStreamFrame(STREAM.CLOSE, entry.localId), { binary: true });
+        } catch {
+          // ignore
+        }
+        this._closeStream(entry, 'agent offline', false);
+      }
       if (tunnel.clientId !== clientId) continue;
       try {
         tunnel.ws.close(4004, 'agent offline');
@@ -335,7 +354,7 @@ export class TunnelGateway {
         if (now - entry.lastActivity > idleMs) {
           try {
             this.agentGateway.sendStream(
-              tunnel.clientId,
+              entry.clientId,
               encodeStreamFrame(STREAM.CLOSE, entry.globalId),
             );
           } catch {
@@ -425,6 +444,7 @@ export class TunnelGateway {
       remoteAddress: tunnel.remoteAddress,
       createdAt: new Date(tunnel.createdAt).toISOString(),
       streams: [...tunnel.streams.values()].map((entry) => ({
+        clientId: entry.clientId,
         target: `${entry.host}:${entry.port}`,
         localPort: entry.localPort,
         bytesIn: entry.bytesIn,

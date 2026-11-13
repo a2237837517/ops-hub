@@ -193,11 +193,12 @@ function createMcpServer({ config, gateway, jobs, files, store, logger }) {
         clientId: z.string().describe('客户端 ID 或名称'),
         mode: z.enum(['forward', 'socks5']).optional().default('forward').describe('forward=端口转发，socks5=本地 SOCKS5 代理'),
         localPort: z.number().int().min(1).max(65535).describe('本地监听端口，例如 13306 或 1080'),
+        userSelect: z.boolean().optional().describe('socks5 模式下用用户名选择 clientId（一个客户端访问多个 Agent）'),
         host: z.string().optional().default('127.0.0.1').describe('forward 模式的目标地址'),
         port: z.number().int().min(1).max(65535).optional().describe('forward 模式的目标端口'),
       },
     },
-    async ({ clientId, mode, localPort, host, port }) => {
+    async ({ clientId, mode, localPort, host, port, userSelect }) => {
       try {
         const agent = store.findAgent(clientId);
         if (!agent) throw new Error('client not found');
@@ -206,8 +207,9 @@ function createMcpServer({ config, gateway, jobs, files, store, logger }) {
           serverUrl = `${serverUrl.replace(/\/+$/, '')}/agent/tunnel`;
         }
         if (mode === 'socks5') {
-          const command = `ops-agent.exe tunnel --server ${serverUrl} --token ${config.tunnel.token} --client ${agent.id} --socks5 ${localPort}`;
-          return textResult({ clientId: agent.id, serverUrl, mode: 'socks5', command });
+          const flag = userSelect ? ' --socks5-user-select' : '';
+          const command = `ops-agent.exe tunnel --server ${serverUrl} --token ${config.tunnel.token} --client ${agent.id} --socks5 ${localPort}${flag}`;
+          return textResult({ clientId: agent.id, serverUrl, mode: 'socks5', userSelect: Boolean(userSelect), command });
         }
         if (!port) throw new Error('port is required for forward mode');
         const command = `ops-agent.exe tunnel --server ${serverUrl} --token ${config.tunnel.token} --client ${agent.id} --forward ${localPort}=${host}:${port}`;

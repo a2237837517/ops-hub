@@ -182,8 +182,9 @@
     state.tunnelMode = mode === 'socks5' ? 'socks5' : 'forward';
     const socks = state.tunnelMode === 'socks5';
     $('tunnel-form').classList.toggle('socks5', socks);
+    $('tunnel-user-select-wrap').classList.toggle('hidden', !socks);
     $('tunnel-desc').textContent = socks
-      ? '在本地开一个 SOCKS5 端口，通过当前客户端访问任意 TCP 目标。走现有 443，不开新端口；Clash 填 127.0.0.1:端口。'
+      ? '在本地开一个 SOCKS5 端口，通过当前客户端访问任意 TCP 目标。走现有 443，不开新端口；Clash 填 127.0.0.1:端口。勾选“用户名选择 Agent”后，用户名填 clientId，密码填命令里的 token。'
       : '在本地 127.0.0.1 开一个端口，通过当前客户端访问一个固定目标 TCP 端口。';
     $('tunnel-local').value = socks ? '1080' : '13306';
     for (const radio of document.querySelectorAll('input[name="tunnel-mode"]')) {
@@ -220,7 +221,7 @@
     }
     try {
       const body = socks
-        ? { socks5: { port: local } }
+        ? { socks5: { port: local, userSelect: $('tunnel-user-select').checked } }
         : { forwards: [{ local, host, port }] };
       const data = await api(`/api/clients/${encodeURIComponent(state.selected.id)}/tunnel-command`, {
         method: 'POST',

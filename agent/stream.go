@@ -18,6 +18,7 @@ const (
 )
 
 type streamOpenRequest struct {
+	ClientID  string `json:"clientId,omitempty"`
 	Host      string `json:"host"`
 	Port      int    `json:"port"`
 	LocalPort int    `json:"localPort,omitempty"`

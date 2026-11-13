@@ -650,6 +650,8 @@ td.command { max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
 .tunnel-mode { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 12px; font-size: 13px; color: var(--muted); }
 .tunnel-mode label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .tunnel-form.socks5 .tunnel-target { display: none; }
+.tunnel-socks-only.hidden { display: none; }
+.tunnel-form label.tunnel-socks-only { flex-direction: row; align-items: center; gap: 8px; color: var(--text); }
 .tunnel-form {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
