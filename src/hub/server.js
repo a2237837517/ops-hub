@@ -276,6 +276,35 @@ export async function startHub(config) {
   app.post('/api/clients/:id/tunnel-command', (req, res) => {
     const agent = store.findAgent(req.params.id);
     if (!agent) return res.status(404).json({ success: false, message: 'client not found' });
+
+    let serverUrl = String(config.hub.publicUrl || '').replace(/\/agent$/, '/agent/tunnel');
+    if (!/\/agent\/tunnel$/.test(serverUrl)) serverUrl = `${serverUrl.replace(/\/+$/, '')}/agent/tunnel`;
+
+    if (req.body?.socks5) {
+      const port = Number(req.body.socks5.port || 1080);
+      if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+        return res.status(400).json({ success: false, message: `invalid local port: ${req.body.socks5.port}` });
+      }
+      const user = String(req.body.socks5.user || '').trim();
+      const pass = String(req.body.socks5.pass || '');
+      const parts = [
+        'ops-agent.exe tunnel',
+        `--server ${serverUrl}`,
+        `--token ${config.tunnel.token}`,
+        `--client ${agent.id}`,
+        `--socks5 ${port}`,
+      ];
+      if (user) parts.push(`--socks5-user ${user}`);
+      if (pass) parts.push(`--socks5-pass ${pass}`);
+      return res.json({
+        success: true,
+        mode: 'socks5',
+        command: parts.join(' '),
+        serverUrl,
+        port,
+      });
+    }
+
     const forwards = Array.isArray(req.body?.forwards) ? req.body.forwards : [];
     if (!forwards.length) {
       return res.status(400).json({ success: false, message: 'forwards is required' });
@@ -296,8 +325,6 @@ export async function startHub(config) {
       }
       parts.push(`--forward ${local}=${host}:${port}`);
     }
-    let serverUrl = String(config.hub.publicUrl || '').replace(/\/agent$/, '/agent/tunnel');
-    if (!/\/agent\/tunnel$/.test(serverUrl)) serverUrl = `${serverUrl.replace(/\/+$/, '')}/agent/tunnel`;
     const command = [
       'ops-agent.exe tunnel',
       `--server ${serverUrl}`,
@@ -305,7 +332,7 @@ export async function startHub(config) {
       `--client ${agent.id}`,
       ...parts,
     ].join(' ');
-    res.json({ success: true, command, serverUrl, forwards: forwards.length });
+    res.json({ success: true, mode: 'forward', command, serverUrl, forwards: forwards.length });
   });
 
   app.get('/api/downloads', (_req, res) => {

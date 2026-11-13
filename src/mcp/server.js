@@ -186,17 +186,18 @@ function createMcpServer({ config, gateway, jobs, files, store, logger }) {
   server.registerTool(
     'ops_tunnel_command',
     {
-      title: '生成端口转发命令',
+      title: '生成本地隧道命令',
       description:
-        '生成一条本地端口转发命令：在你自己的电脑上运行后，访问 127.0.0.1:本地端口 即可到达目标机器的 host:port。适合 MySQL、HTTP、RDP 等 TCP 服务。',
+        '有两种模式：forward=固定目标端口转发；socks5=本地 SOCKS5 代理（任意目标，走 443，不开新端口）。命令在客户端自己的电脑上运行。',
       inputSchema: {
         clientId: z.string().describe('客户端 ID 或名称'),
-        localPort: z.number().int().min(1).max(65535).describe('本地监听端口，例如 13306'),
-        host: z.string().optional().default('127.0.0.1').describe('目标地址，默认 127.0.0.1（Agent 本机）'),
-        port: z.number().int().min(1).max(65535).describe('目标端口，例如 3306'),
+        mode: z.enum(['forward', 'socks5']).optional().default('forward').describe('forward=端口转发，socks5=本地 SOCKS5 代理'),
+        localPort: z.number().int().min(1).max(65535).describe('本地监听端口，例如 13306 或 1080'),
+        host: z.string().optional().default('127.0.0.1').describe('forward 模式的目标地址'),
+        port: z.number().int().min(1).max(65535).optional().describe('forward 模式的目标端口'),
       },
     },
-    async ({ clientId, localPort, host, port }) => {
+    async ({ clientId, mode, localPort, host, port }) => {
       try {
         const agent = store.findAgent(clientId);
         if (!agent) throw new Error('client not found');
@@ -204,8 +205,13 @@ function createMcpServer({ config, gateway, jobs, files, store, logger }) {
         if (!/\/agent\/tunnel$/.test(serverUrl)) {
           serverUrl = `${serverUrl.replace(/\/+$/, '')}/agent/tunnel`;
         }
+        if (mode === 'socks5') {
+          const command = `ops-agent.exe tunnel --server ${serverUrl} --token ${config.tunnel.token} --client ${agent.id} --socks5 ${localPort}`;
+          return textResult({ clientId: agent.id, serverUrl, mode: 'socks5', command });
+        }
+        if (!port) throw new Error('port is required for forward mode');
         const command = `ops-agent.exe tunnel --server ${serverUrl} --token ${config.tunnel.token} --client ${agent.id} --forward ${localPort}=${host}:${port}`;
-        return textResult({ clientId: agent.id, serverUrl, command });
+        return textResult({ clientId: agent.id, serverUrl, mode: 'forward', command });
       } catch (error) {
         return errorResult(error);
       }

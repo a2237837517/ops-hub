@@ -5,6 +5,7 @@
     latestVersion: '',
     socks5: null,
     socks5User: '',
+    tunnelMode: 'forward',
     selected: null,
     view: 'clients',
     currentJob: null,
@@ -177,9 +178,23 @@
     }
   }
 
+  function setTunnelMode(mode) {
+    state.tunnelMode = mode === 'socks5' ? 'socks5' : 'forward';
+    const socks = state.tunnelMode === 'socks5';
+    $('tunnel-form').classList.toggle('socks5', socks);
+    $('tunnel-desc').textContent = socks
+      ? '在本地开一个 SOCKS5 端口，通过当前客户端访问任意 TCP 目标。走现有 443，不开新端口；Clash 填 127.0.0.1:端口。'
+      : '在本地 127.0.0.1 开一个端口，通过当前客户端访问一个固定目标 TCP 端口。';
+    $('tunnel-local').value = socks ? '1080' : '13306';
+    for (const radio of document.querySelectorAll('input[name="tunnel-mode"]')) {
+      radio.checked = radio.value === state.tunnelMode;
+    }
+  }
+
   function showTunnel() {
     if (!state.selected) return;
     $('tunnel-backdrop').classList.remove('hidden');
+    setTunnelMode(state.tunnelMode || 'forward');
     $('tunnel-command').classList.add('hidden');
     $('tunnel-actions').classList.add('hidden');
     $('tunnel-copy').textContent = '复制命令';
@@ -198,14 +213,18 @@
     const local = Number($('tunnel-local').value);
     const host = $('tunnel-host').value.trim();
     const port = Number($('tunnel-port').value);
-    if (!local || !host || !port) {
-      alert('请填写本地端口、目标地址和目标端口');
+    const socks = state.tunnelMode === 'socks5';
+    if (!local || (!socks && (!host || !port))) {
+      alert(socks ? '请填写本地端口' : '请填写本地端口、目标地址和目标端口');
       return;
     }
     try {
+      const body = socks
+        ? { socks5: { port: local } }
+        : { forwards: [{ local, host, port }] };
       const data = await api(`/api/clients/${encodeURIComponent(state.selected.id)}/tunnel-command`, {
         method: 'POST',
-        body: JSON.stringify({ forwards: [{ local, host, port }] }),
+        body: JSON.stringify(body),
       });
       $('tunnel-command').textContent = data.command;
       $('tunnel-command').classList.remove('hidden');
@@ -975,6 +994,9 @@
   }
   $('tunnel-btn').addEventListener('click', showTunnel);
   $('tunnel-close').addEventListener('click', hideTunnel);
+  for (const radio of document.querySelectorAll('input[name="tunnel-mode"]')) {
+    radio.addEventListener('change', () => setTunnelMode(radio.value));
+  }
   $('tunnel-generate').addEventListener('click', generateTunnelCommand);
   $('tunnel-copy').addEventListener('click', copyTunnelCommand);
   $('tunnel-refresh').addEventListener('click', () => loadTunnels().catch((e) => alert(e.message)));

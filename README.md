@@ -431,6 +431,35 @@ proxies:
 
 MCP tools: `ops_socks_enable`, `ops_socks_disable`, `ops_socks_status`.
 
+### Local SOCKS5 (no new port)
+
+If you do not want to open a public port, run the tunnel client on the machine
+that needs the proxy. It reuses the existing 443 WebSocket:
+
+```bash
+ops-agent.exe tunnel \
+  --server wss://mcp.example.com/agent/tunnel \
+  --token <tunnelToken> \
+  --client <clientId> \
+  --socks5 1080
+```
+
+Clash:
+
+```yaml
+proxies:
+  - name: ops-local
+    type: socks5
+    server: 127.0.0.1
+    port: 1080
+    udp: false
+```
+
+- No security-group change, no new public port, TLS end to end
+- One local port per `--client`; run 1080/1081/... for multiple Agents
+- Optional local auth: `--socks5-user ops --socks5-pass <password>`
+- Targets are still restricted by `tunnel.allowedCidrs` / `tunnel.allowedPorts`
+
 ---
 
 ## Remote Upgrade

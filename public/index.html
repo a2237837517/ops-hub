@@ -23,7 +23,7 @@
       <div class="top-actions">
         <span id="hub-status" class="muted">连接中...</span>
         <button id="downloads-btn" class="ghost">下载客户端</button>
-        <button id="socks5-btn" class="ghost">SOCKS5</button>
+        <button id="socks5-btn" class="ghost">SOCKS5 服务端</button>
         <button id="revoked-btn" class="ghost">封禁管理</button>
         <button id="refresh-btn" class="ghost">刷新</button>
         <button id="logout-btn" class="ghost">退出</button>
@@ -245,7 +245,7 @@
   <div id="socks5-backdrop" class="dialog-backdrop hidden">
     <div class="dialog-card socks5-card" role="dialog" aria-modal="true" aria-labelledby="socks5-title">
       <div class="dialog-icon">⇄</div>
-      <h3 id="socks5-title">SOCKS5 代理</h3>
+      <h3 id="socks5-title">SOCKS5 服务端（需开 1080）</h3>
       <p class="dialog-message muted">开启后 Clash / 浏览器可以直接使用；被控端不需要安装任何东西。</p>
       <div class="socks5-status">
         <span id="socks5-state" class="badge">off</span>
@@ -279,12 +279,16 @@
   <div id="tunnel-backdrop" class="dialog-backdrop hidden">
     <div class="dialog-card tunnel-card" role="dialog" aria-modal="true" aria-labelledby="tunnel-title">
       <div class="dialog-icon">⇄</div>
-      <h3 id="tunnel-title">端口转发</h3>
-      <p class="dialog-message muted">在本地 127.0.0.1 开一个端口，通过当前客户端访问目标 TCP 端口。命令在你自己电脑上运行。</p>
-      <div class="tunnel-form">
+      <h3 id="tunnel-title">端口转发 / SOCKS5</h3>
+      <p id="tunnel-desc" class="dialog-message muted">在本地 127.0.0.1 开一个端口，通过当前客户端访问一个固定目标 TCP 端口。命令在你自己电脑上运行。</p>
+      <div class="tunnel-mode">
+        <label><input type="radio" name="tunnel-mode" value="forward" checked /> 端口转发（固定目标）</label>
+        <label><input type="radio" name="tunnel-mode" value="socks5" /> SOCKS5 代理（本地端口，不开新端口）</label>
+      </div>
+      <div id="tunnel-form" class="tunnel-form">
         <label>本地端口<input id="tunnel-local" class="dialog-input" value="13306" autocomplete="off" /></label>
-        <label>目标地址<input id="tunnel-host" class="dialog-input" value="127.0.0.1" autocomplete="off" /></label>
-        <label>目标端口<input id="tunnel-port" class="dialog-input" value="3306" autocomplete="off" /></label>
+        <label class="tunnel-target">目标地址<input id="tunnel-host" class="dialog-input" value="127.0.0.1" autocomplete="off" /></label>
+        <label class="tunnel-target">目标端口<input id="tunnel-port" class="dialog-input" value="3306" autocomplete="off" /></label>
       </div>
       <button id="tunnel-generate" class="primary-btn">生成命令</button>
       <pre id="tunnel-command" class="tunnel-command hidden"></pre>

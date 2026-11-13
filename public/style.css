@@ -647,6 +647,9 @@ td.command { max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
 
 /* 端口转发 */
 .tunnel-card { width: min(720px, 100%); }
+.tunnel-mode { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 12px; font-size: 13px; color: var(--muted); }
+.tunnel-mode label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.tunnel-form.socks5 .tunnel-target { display: none; }
 .tunnel-form {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

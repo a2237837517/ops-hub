@@ -35,6 +35,7 @@ type tunnelResult struct {
 }
 
 type localStream struct {
+	id   uint32
 	conn net.Conn
 	ch   chan []byte
 	done chan struct{}
@@ -55,6 +56,7 @@ type tunnelClient struct {
 	bind     string
 	insecure bool
 	forwards []tunnelForward
+	socks5   []socks5Spec
 
 	mu        sync.Mutex
 	conn      *websocket.Conn
@@ -84,10 +86,15 @@ func runTunnelClient(args []string) {
 	insecure := fs.Bool("insecure", false, "跳过 TLS 证书校验（仅测试）")
 	var forwards multiFlag
 	fs.Var(&forwards, "forward", "端口转发，格式 本地端口=目标主机:目标端口，可重复")
+	var socks5Specs multiFlag
+	fs.Var(&socks5Specs, "socks5", "本地 SOCKS5 端口，例如 1080 或 127.0.0.1:1080，可重复")
+	socks5User := fs.String("socks5-user", "", "本地 SOCKS5 用户名（可选）")
+	socks5Pass := fs.String("socks5-pass", "", "本地 SOCKS5 密码（可选）")
 	_ = fs.Parse(args)
 
-	if *server == "" || *token == "" || *clientID == "" || len(forwards) == 0 {
+	if *server == "" || *token == "" || *clientID == "" || (len(forwards) == 0 && len(socks5Specs) == 0) {
 		fmt.Fprintln(os.Stderr, "用法: ops-agent tunnel --server wss://.../agent/tunnel --token <token> --client <clientId> --forward 13306=127.0.0.1:3306")
+		fmt.Fprintln(os.Stderr, "   或: ops-agent tunnel --server wss://.../agent/tunnel --token <token> --client <clientId> --socks5 1080")
 		os.Exit(2)
 	}
 
@@ -101,6 +108,22 @@ func runTunnelClient(args []string) {
 		parsed = append(parsed, forward)
 	}
 
+	parsedSocks5 := make([]socks5Spec, 0, len(socks5Specs))
+	for _, spec := range socks5Specs {
+		addr := strings.TrimSpace(spec)
+		if addr == "" {
+			continue
+		}
+		if !strings.Contains(addr, ":") {
+			addr = net.JoinHostPort(*bind, addr)
+		}
+		parsedSocks5 = append(parsedSocks5, socks5Spec{
+			Addr: addr,
+			User: *socks5User,
+			Pass: *socks5Pass,
+		})
+	}
+
 	client := &tunnelClient{
 		server:   *server,
 		token:    *token,
@@ -108,6 +131,7 @@ func runTunnelClient(args []string) {
 		bind:     *bind,
 		insecure: *insecure,
 		forwards: parsed,
+		socks5:   parsedSocks5,
 		pending:  make(map[uint32]chan tunnelResult),
 		streams:  make(map[uint32]*localStream),
 		closed:   make(chan struct{}),
@@ -242,6 +266,17 @@ func (c *tunnelClient) startListeners() error {
 		fmt.Fprintf(os.Stderr, "[tunnel] 本地 %s -> %s:%d\n", address, forward.Host, forward.Port)
 		go c.acceptLoop(listener, forward)
 	}
+	for _, spec := range c.socks5 {
+		listener, err := net.Listen("tcp", spec.Addr)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[tunnel] 监听 SOCKS5 %s 失败: %v\n", spec.Addr, err)
+			continue
+		}
+		c.listeners = append(c.listeners, listener)
+		opened++
+		fmt.Fprintf(os.Stderr, "[tunnel] 本地 SOCKS5 %s\n", spec.Addr)
+		go c.acceptSocks5(listener, spec)
+	}
 	if opened == 0 {
 		return errors.New("没有可用的本地监听端口")
 	}
@@ -265,7 +300,7 @@ func (c *tunnelClient) acceptLoop(listener net.Listener, forward tunnelForward) 
 	}
 }
 
-func (c *tunnelClient) handleLocal(conn net.Conn, forward tunnelForward) {
+func (c *tunnelClient) openStream(conn net.Conn, host string, port, localPort int) (*localStream, error) {
 	id := atomic.AddUint32(&c.nextID, 1)
 	if id == 0 {
 		id = atomic.AddUint32(&c.nextID, 1)
@@ -280,9 +315,9 @@ func (c *tunnelClient) handleLocal(conn net.Conn, forward tunnelForward) {
 		c.mu.Unlock()
 	}()
 
-	// 先注册 stream 再发 OPEN：MySQL/SSH 这类服务在 TCP 建连后立刻发 greeting，
-	// 如果等 OPEN_OK 再注册，第一批 DATA 会被丢掉，表现为 handshake 超时。
+	// 先注册 stream 再发 OPEN：目标服务可能在 OPEN_OK 后立刻发 greeting。
 	stream := &localStream{
+		id:   id,
 		conn: conn,
 		ch:   make(chan []byte, 64),
 		done: make(chan struct{}),
@@ -290,39 +325,46 @@ func (c *tunnelClient) handleLocal(conn net.Conn, forward tunnelForward) {
 	c.mu.Lock()
 	c.streams[id] = stream
 	c.mu.Unlock()
-	go stream.writeLoop()
 
 	payload, _ := json.Marshal(streamOpenRequest{
-		Host:      forward.Host,
-		Port:      forward.Port,
-		LocalPort: forward.Local,
+		Host:      host,
+		Port:      port,
+		LocalPort: localPort,
 	})
 	if err := c.sendFrame(streamOpen, id, payload); err != nil {
 		c.removeStream(id)
-		return
+		return nil, err
 	}
 
 	select {
 	case result := <-resultCh:
 		if !result.ok {
-			fmt.Fprintf(os.Stderr, "[tunnel] %s:%d 打开失败: %s\n", forward.Host, forward.Port, result.msg)
 			c.removeStream(id)
-			return
+			return nil, fmt.Errorf("%s", result.msg)
 		}
 	case <-time.After(15 * time.Second):
-		fmt.Fprintf(os.Stderr, "[tunnel] %s:%d 打开超时\n", forward.Host, forward.Port)
 		c.removeStream(id)
-		return
+		return nil, fmt.Errorf("打开超时")
 	case <-c.closed:
 		c.removeStream(id)
+		return nil, fmt.Errorf("已退出")
+	}
+	return stream, nil
+}
+
+func (c *tunnelClient) handleLocal(conn net.Conn, forward tunnelForward) {
+	stream, err := c.openStream(conn, forward.Host, forward.Port, forward.Local)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[tunnel] %s:%d 打开失败: %v\n", forward.Host, forward.Port, err)
 		return
 	}
+	go stream.writeLoop()
 
 	buf := make([]byte, 32*1024)
 	for {
 		n, err := conn.Read(buf)
 		if n > 0 {
-			if sendErr := c.sendFrame(streamData, id, buf[:n]); sendErr != nil {
+			if sendErr := c.sendFrame(streamData, stream.id, buf[:n]); sendErr != nil {
 				break
 			}
 		}
@@ -330,8 +372,8 @@ func (c *tunnelClient) handleLocal(conn net.Conn, forward tunnelForward) {
 			break
 		}
 	}
-	c.removeStream(id)
-	_ = c.sendFrame(streamClose, id, nil)
+	c.removeStream(stream.id)
+	_ = c.sendFrame(streamClose, stream.id, nil)
 }
 
 func (s *localStream) writeLoop() {
