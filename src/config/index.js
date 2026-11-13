@@ -21,6 +21,15 @@ const DEFAULTS = {
     mcpToken: 'change-me-mcp-token',
     adminToken: 'change-me-admin-token',
   },
+  tunnel: {
+    // 默认关闭：tunnelToken 一旦泄露等于内网入口泄露，必须由管理员显式开启并设置随机 token。
+    enabled: false,
+    token: '',
+    allowedCidrs: ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'],
+    allowedPorts: [],
+    maxStreamsPerTunnel: 16,
+    idleTimeoutSec: 1800,
+  },
   limits: {
     maxConcurrentJobsPerClient: 4,
     maxOutputBytesPerJob: 50 * 1024 * 1024,

@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const Version = "0.1.15"
+const Version = "0.1.17"
 
 type Config struct {
 	Server               string   `json:"server"`
@@ -32,6 +32,8 @@ type Config struct {
 	CAFile               string   `json:"caFile"`
 	Proxy                string   `json:"proxy"`
 	HeartbeatIntervalSec int      `json:"heartbeatIntervalSec"`
+	AllowPublicTargets   bool     `json:"allowPublicTargets"`
+	DisableRemoteUpgrade bool     `json:"disableRemoteUpgrade"`
 
 	// StateReset 表示 agent-state.json 来自另一台机器，本次启动已丢弃旧身份。
 	StateReset bool `json:"-"`

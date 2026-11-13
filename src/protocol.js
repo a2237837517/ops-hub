@@ -68,3 +68,28 @@ export function isDangerousCommand(command, patterns) {
   const text = String(command || '').toLowerCase();
   return (patterns || []).some((pattern) => text.includes(String(pattern).toLowerCase()));
 }
+
+// 隧道流帧： [1 字节类型][4 字节 streamId 大端][payload]
+export const STREAM = {
+  OPEN: 1,
+  OPEN_OK: 2,
+  OPEN_FAIL: 3,
+  DATA: 4,
+  CLOSE: 5,
+};
+
+export function encodeStreamFrame(type, streamId, payload = Buffer.alloc(0)) {
+  const header = Buffer.alloc(5);
+  header[0] = type;
+  header.writeUInt32BE(streamId >>> 0, 1);
+  return Buffer.concat([header, payload]);
+}
+
+export function decodeStreamFrame(buffer) {
+  if (!buffer || buffer.length < 5) return null;
+  return {
+    type: buffer[0],
+    streamId: buffer.readUInt32BE(1),
+    payload: buffer.subarray(5),
+  };
+}

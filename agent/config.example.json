@@ -13,5 +13,7 @@
   "insecureSkipVerify": false,
   "caFile": "",
   "proxy": "",
-  "heartbeatIntervalSec": 15
+  "heartbeatIntervalSec": 15,
+  "allowPublicTargets": false,
+  "disableRemoteUpgrade": false
 }

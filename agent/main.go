@@ -17,6 +17,10 @@ func main() {
 		return
 	}
 	command := os.Args[1]
+	if command == "tunnel" {
+		runTunnelClient(os.Args[2:])
+		return
+	}
 	fs := flag.NewFlagSet(command, flag.ExitOnError)
 	configPath := fs.String("config", defaultConfigPath(), "配置文件路径")
 	_ = fs.Parse(os.Args[2:])
@@ -109,6 +113,8 @@ func printUsage() {
   ops-agent install [--config config.json]   Windows: 安装并启动服务；Linux 用 install-linux.sh
   ops-agent uninstall                        Windows: 停止并卸载服务
   ops-agent reset-id                         清除本机客户端身份（会重新注册，clientId 重新生成）
+  ops-agent tunnel --server ... --token ... --client ... --forward 13306=127.0.0.1:3306
+                                             本地端口转发到目标机器（可重复 --forward）
   ops-agent version
   ops-agent help
 

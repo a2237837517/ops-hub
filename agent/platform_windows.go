@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -258,4 +259,28 @@ func uninstallService() error {
 	}
 	fmt.Printf("服务 %s 已卸载\n", serviceName)
 	return nil
+}
+
+func applyUpgrade(exePath, newPath string) error {
+	dir := filepath.Dir(exePath)
+	helper := filepath.Join(dir, "ops-agent-update.cmd")
+	script := fmt.Sprintf(`@echo off
+setlocal
+timeout /t 3 /nobreak >nul
+sc stop %s >nul 2>&1
+powershell -NoProfile -Command "for($i=0;$i -lt 60;$i++){ if((Get-Service -Name '%s').Status -eq 'Stopped'){ exit 0 }; Start-Sleep -Seconds 2 }; exit 1"
+if errorlevel 1 exit /b 1
+copy /Y "%s" "%s.bak" >nul 2>&1
+copy /Y "%s" "%s" >nul
+if errorlevel 1 exit /b 1
+del "%s" >nul 2>&1
+sc start %s >nul
+del "%%~f0"
+`, serviceName, serviceName, exePath, exePath, newPath, exePath, newPath, serviceName)
+	if err := os.WriteFile(helper, []byte(script), 0o755); err != nil {
+		return err
+	}
+	cmd := exec.Command("cmd.exe", "/c", helper)
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x00000008 | 0x00000200}
+	return cmd.Start()
 }

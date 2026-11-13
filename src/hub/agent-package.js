@@ -116,6 +116,8 @@ export async function createAgentPackage(config, { os, arch, name = '', tags = [
       caFile: '',
       proxy: '',
       heartbeatIntervalSec: 15,
+      allowPublicTargets: false,
+      disableRemoteUpgrade: false,
     };
     fs.writeFileSync(
       path.join(extractedRoot, 'config.json'),

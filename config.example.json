@@ -27,7 +27,9 @@
     "spoolQuotaBytes": 10737418240
   },
   "security": {
-    "allowedUploadRoots": ["./data/staging"],
+    "allowedUploadRoots": [
+      "./data/staging"
+    ],
     "requireApprovalForDangerous": true,
     "dangerousPatterns": [
       "format ",
@@ -38,5 +40,18 @@
       "del /f /s /q c:\\",
       "rd /s /q c:\\"
     ]
+  },
+  "tunnel": {
+    "enabled": false,
+    "token": "",
+    "allowedCidrs": [
+      "127.0.0.0/8",
+      "10.0.0.0/8",
+      "172.16.0.0/12",
+      "192.168.0.0/16"
+    ],
+    "allowedPorts": [],
+    "maxStreamsPerTunnel": 16,
+    "idleTimeoutSec": 1800
   }
 }

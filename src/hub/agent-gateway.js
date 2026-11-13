@@ -30,7 +30,8 @@ export class AgentGateway extends EventEmitter {
         return;
       }
       if (pathname !== '/agent') {
-        socket.destroy();
+        // /agent/tunnel 由 TunnelGateway 处理，不能在这里销毁
+        if (pathname !== '/agent/tunnel') socket.destroy();
         return;
       }
       this.wss.handleUpgrade(req, socket, head, (ws) => {
@@ -52,7 +53,15 @@ export class AgentGateway extends EventEmitter {
     ws.on('pong', () => {
       ws.isAlive = true;
     });
-    ws.on('message', (raw) => {
+    ws.on('message', (raw, isBinary) => {
+      if (isBinary) {
+        if (!ws.clientId) {
+          ws.close(4003, 'hello required');
+          return;
+        }
+        this.emit('stream', ws.clientId, raw);
+        return;
+      }
       let msg;
       try {
         msg = JSON.parse(raw.toString('utf8'));
@@ -392,6 +401,32 @@ export class AgentGateway extends EventEmitter {
     return this.connections.has(clientId);
   }
 
+  getConnection(clientId) {
+    return this.connections.get(clientId) || null;
+  }
+
+  send(clientId, msg) {
+    const conn = this.connections.get(clientId);
+    if (!conn || conn.ws.readyState !== WebSocket.OPEN) return false;
+    try {
+      conn.ws.send(JSON.stringify(msg));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  sendStream(clientId, payload) {
+    const conn = this.connections.get(clientId);
+    if (!conn || conn.ws.readyState !== WebSocket.OPEN) return false;
+    try {
+      conn.ws.send(payload, { binary: true });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   kick(clientId, reason = 'client revoked') {
     const conn = this.connections.get(clientId);
     if (!conn) return false;
@@ -438,7 +473,7 @@ export class AgentGateway extends EventEmitter {
     clearInterval(this.heartbeatTimer);
     for (const conn of this.connections.values()) {
       try {
-        conn.ws.close(1001, 'hub shutdown');
+        conn.ws.terminate();
       } catch {
         // ignore
       }

@@ -12,6 +12,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 )
 
@@ -101,4 +102,33 @@ func currentUserName() string {
 		return u.Username
 	}
 	return ""
+}
+
+func applyUpgrade(exePath, newPath string) error {
+	// 运行中的二进制不能直接覆盖（ETXTBSY），先改名再放新文件。
+	// 服务模式用 systemctl 拉起；前台模式按原命令行重新启动。
+	args := strings.Join(os.Args[1:], " ")
+	script := fmt.Sprintf(`#!/bin/sh
+sleep 3
+if systemctl is-enabled --quiet ops-hub-agent 2>/dev/null; then
+  systemctl stop ops-hub-agent 2>/dev/null
+  mv -f %[1]q %[1]q.bak 2>/dev/null
+  mv -f %[2]q %[1]q
+  chmod +x %[1]q
+  systemctl start ops-hub-agent 2>/dev/null
+else
+  mv -f %[1]q %[1]q.bak 2>/dev/null
+  mv -f %[2]q %[1]q
+  chmod +x %[1]q
+  nohup %[1]q %[3]s >/dev/null 2>&1 &
+fi
+rm -f "$0"
+`, exePath, newPath, args)
+	path := filepath.Join(os.TempDir(), fmt.Sprintf("ops-agent-update-%d.sh", os.Getpid()))
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		return err
+	}
+	cmd := exec.Command("/bin/sh", path)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	return cmd.Start()
 }

@@ -77,3 +77,7 @@ func uninstallService() error {
 }
 
 func currentUserName() string { return "" }
+
+func applyUpgrade(_, _ string) error {
+	return fmt.Errorf("当前平台不支持远程升级")
+}

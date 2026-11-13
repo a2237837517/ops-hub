@@ -116,12 +116,128 @@
     if (event.target === $('dialog-backdrop')) closeDialog(null);
   });
   document.addEventListener('keydown', (event) => {
-    if ($('dialog-backdrop').classList.contains('hidden')) return;
-    if (event.key === 'Escape') {
+    if (event.key !== 'Escape') return;
+    if (!$('tunnel-backdrop').classList.contains('hidden')) {
       event.preventDefault();
-      closeDialog(null);
+      hideTunnel();
+      return;
     }
+    if ($('dialog-backdrop').classList.contains('hidden')) return;
+    event.preventDefault();
+    closeDialog(null);
   });
+
+  async function upgradeClient() {
+    if (!state.selected) return;
+    try {
+      const versions = await api('/api/agent-versions');
+      const latest = versions.version || '';
+      const current = state.selected.version || '';
+      if (!latest || latest === current) {
+        alert(`已经是最新版本 ${latest || current}`);
+        return;
+      }
+      const ok = await openDialog({
+        title: '升级客户端',
+        message: `客户端：${state.selected.displayName || state.selected.hostname || state.selected.id}\n当前版本：${current || '未知'}\n最新版本：${latest}\n\n升级会下载新版本并自动重启服务，客户端会短暂离线。`,
+        confirmText: '升级',
+        icon: '⬆',
+      });
+      if (!ok) return;
+      const result = await api(`/api/clients/${encodeURIComponent(state.selected.id)}/upgrade`, {
+        method: 'POST',
+      });
+      alert(`已下发升级：${result.from || '?'} → ${result.to}\n约 10-30 秒后客户端会自动上线。`);
+      setTimeout(() => loadClients().catch(() => {}), 5000);
+      setTimeout(() => loadClients().catch(() => {}), 15000);
+    } catch (error) {
+      alert(`升级失败: ${error.message}`);
+    }
+  }
+
+  function showTunnel() {
+    if (!state.selected) return;
+    $('tunnel-backdrop').classList.remove('hidden');
+    $('tunnel-command').classList.add('hidden');
+    $('tunnel-actions').classList.add('hidden');
+    $('tunnel-copy').textContent = '复制命令';
+    $('tunnel-list').textContent = '加载中...';
+    loadTunnels().catch((error) => {
+      $('tunnel-list').textContent = `加载失败: ${error.message}`;
+    });
+  }
+
+  function hideTunnel() {
+    $('tunnel-backdrop').classList.add('hidden');
+  }
+
+  async function generateTunnelCommand() {
+    if (!state.selected) return;
+    const local = Number($('tunnel-local').value);
+    const host = $('tunnel-host').value.trim();
+    const port = Number($('tunnel-port').value);
+    if (!local || !host || !port) {
+      alert('请填写本地端口、目标地址和目标端口');
+      return;
+    }
+    try {
+      const data = await api(`/api/clients/${encodeURIComponent(state.selected.id)}/tunnel-command`, {
+        method: 'POST',
+        body: JSON.stringify({ forwards: [{ local, host, port }] }),
+      });
+      $('tunnel-command').textContent = data.command;
+      $('tunnel-command').classList.remove('hidden');
+      $('tunnel-actions').classList.remove('hidden');
+    } catch (error) {
+      alert(`生成失败: ${error.message}`);
+    }
+  }
+
+  async function copyTunnelCommand() {
+    const text = $('tunnel-command').textContent || '';
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      $('tunnel-copy').textContent = '已复制';
+      setTimeout(() => {
+        $('tunnel-copy').textContent = '复制命令';
+      }, 1500);
+    } catch {
+      alert('复制失败，请手动选中命令复制');
+    }
+  }
+
+  async function loadTunnels() {
+    if (!state.selected) return;
+    const data = await api(`/api/tunnels?clientId=${encodeURIComponent(state.selected.id)}`);
+    const list = data.tunnels || [];
+    if (!list.length) {
+      $('tunnel-list').textContent = '暂无';
+      return;
+    }
+    $('tunnel-list').innerHTML = list
+      .map((tunnel) => {
+        const targets = (tunnel.streams || [])
+          .map((stream) => `${stream.target}（本地 ${stream.localPort || '-'}）`)
+          .join('，');
+        return `
+        <div class="tunnel-item">
+          <span>${escapeHtml(targets || '无活动连接')}<br /><span class="muted">${escapeHtml(tunnel.remoteAddress || '')} · ${escapeHtml(tunnel.createdAt || '')}</span></span>
+          <button class="ghost" data-close-tunnel="${escapeHtml(tunnel.id)}">关闭</button>
+        </div>`;
+      })
+      .join('');
+    for (const button of $('tunnel-list').querySelectorAll('[data-close-tunnel]')) {
+      button.addEventListener('click', async () => {
+        try {
+          await api(`/api/tunnels/${encodeURIComponent(button.dataset.closeTunnel)}/close`, { method: 'POST' });
+          await loadTunnels();
+        } catch (error) {
+          alert(`关闭失败: ${error.message}`);
+        }
+      });
+    }
+  }
 
   function showDownloads() {
     state.view = 'downloads';
@@ -547,6 +663,7 @@
       state.selected.os,
       state.selected.arch,
       state.selected.primaryIp,
+      state.selected.version ? `v${state.selected.version}` : '',
       info.hostname ? `host=${info.hostname}` : '',
       info.uptimeSec ? `uptime=${Math.floor(info.uptimeSec / 3600)}h` : '',
     ].filter(Boolean);
@@ -593,6 +710,15 @@
       }
     });
   }
+  $('upgrade-client-btn').addEventListener('click', upgradeClient);
+  $('tunnel-btn').addEventListener('click', showTunnel);
+  $('tunnel-close').addEventListener('click', hideTunnel);
+  $('tunnel-generate').addEventListener('click', generateTunnelCommand);
+  $('tunnel-copy').addEventListener('click', copyTunnelCommand);
+  $('tunnel-refresh').addEventListener('click', () => loadTunnels().catch((e) => alert(e.message)));
+  $('tunnel-backdrop').addEventListener('click', (event) => {
+    if (event.target === $('tunnel-backdrop')) hideTunnel();
+  });
   $('refresh-client-btn').addEventListener('click', () => refreshClientInfo().catch((e) => alert(e.message)));
   $('rename-client-btn').addEventListener('click', () => renameClient());
   $('delete-client-btn').addEventListener('click', async () => {

@@ -2,6 +2,7 @@ import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
+import { requestUpgrade } from '../hub/upgrade.js';
 import { JOB_STATUS } from '../protocol.js';
 import { truncateUtf8 } from '../utils.js';
 import { createAgentPackage, publicBaseUrl } from '../hub/agent-package.js';
@@ -62,7 +63,7 @@ function formatJobOutput(result, maxBytes = 64 * 1024) {
   return `${header}\n\n${text}${footer}`;
 }
 
-export function createMcpRouter({ config, gateway, jobs, files, store, logger }) {
+export function createMcpRouter({ config, gateway, jobs, files, store, logger, tunnels }) {
   const router = express.Router();
 
   const auth = (req, res, next) => {
@@ -175,6 +176,95 @@ function createMcpServer({ config, gateway, jobs, files, store, logger }) {
           return acc;
         }, new Map()).values()];
         return textResult({ count: clients.length, groups, clients });
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'ops_tunnel_command',
+    {
+      title: '生成端口转发命令',
+      description:
+        '生成一条本地端口转发命令：在你自己的电脑上运行后，访问 127.0.0.1:本地端口 即可到达目标机器的 host:port。适合 MySQL、HTTP、RDP 等 TCP 服务。',
+      inputSchema: {
+        clientId: z.string().describe('客户端 ID 或名称'),
+        localPort: z.number().int().min(1).max(65535).describe('本地监听端口，例如 13306'),
+        host: z.string().optional().default('127.0.0.1').describe('目标地址，默认 127.0.0.1（Agent 本机）'),
+        port: z.number().int().min(1).max(65535).describe('目标端口，例如 3306'),
+      },
+    },
+    async ({ clientId, localPort, host, port }) => {
+      try {
+        const agent = store.findAgent(clientId);
+        if (!agent) throw new Error('client not found');
+        let serverUrl = String(config.hub.publicUrl || '').replace(/\/agent$/, '/agent/tunnel');
+        if (!/\/agent\/tunnel$/.test(serverUrl)) {
+          serverUrl = `${serverUrl.replace(/\/+$/, '')}/agent/tunnel`;
+        }
+        const command = `ops-agent.exe tunnel --server ${serverUrl} --token ${config.tunnel.token} --client ${agent.id} --forward ${localPort}=${host}:${port}`;
+        return textResult({ clientId: agent.id, serverUrl, command });
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'ops_tunnel_list',
+    {
+      title: '列出端口转发隧道',
+      description: '列出当前通过 Hub 建立的端口转发隧道及流量。',
+      inputSchema: {
+        clientId: z.string().optional().describe('只查看某个客户端的隧道'),
+      },
+    },
+    async ({ clientId }) => {
+      try {
+        const list = tunnels.list().filter((item) => !clientId || item.clientId === clientId);
+        return textResult({ count: list.length, tunnels: list });
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'ops_tunnel_close',
+    {
+      title: '关闭端口转发隧道',
+      description: '关闭一条正在使用的端口转发隧道。',
+      inputSchema: {
+        id: z.string().describe('隧道 ID，来自 ops_tunnel_list'),
+      },
+    },
+    async ({ id }) => {
+      try {
+        const ok = tunnels.close(id);
+        if (!ok) throw new Error('tunnel not found');
+        return textResult({ success: true, id });
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'ops_agent_upgrade',
+    {
+      title: '升级客户端 Agent',
+      description:
+        '让在线客户端下载、校验并安装最新 Agent 版本，随后自动重启服务。升级期间客户端会短暂离线。',
+      inputSchema: {
+        clientId: z.string().describe('客户端 ID 或名称'),
+      },
+    },
+    async ({ clientId }) => {
+      try {
+        const result = requestUpgrade({ config, store, gateway, clientId, logger });
+        if (result.error) throw new Error(result.error);
+        return textResult({ success: true, ...result });
       } catch (error) {
         return errorResult(error);
       }

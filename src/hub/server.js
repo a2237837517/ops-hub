@@ -6,6 +6,8 @@ import express from 'express';
 import { AgentGateway } from './agent-gateway.js';
 import { JobManager } from './job-manager.js';
 import { FileManager } from './file-manager.js';
+import { TunnelGateway } from './tunnel-gateway.js';
+import { loadManifest, requestUpgrade } from './upgrade.js';
 import { Store } from '../store.js';
 import { createMcpRouter } from '../mcp/server.js';
 import { cleanupAgentPackages, privatePackageFile } from './agent-package.js';
@@ -33,9 +35,15 @@ export async function startHub(config) {
   });
 
   const server = http.createServer(app);
+  const sockets = new Set();
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+  });
   const gateway = new AgentGateway({ httpServer: server, config, store, logger });
   const jobs = new JobManager({ gateway, store, config, logger });
   const files = new FileManager({ gateway, store, config, logger });
+  const tunnels = new TunnelGateway({ httpServer: server, config, store, logger, agentGateway: gateway });
 
   const adminAuth = (req, res, next) => {
     const header = String(req.get('authorization') || '');
@@ -108,11 +116,86 @@ export async function startHub(config) {
         dataDir: config.hub.dataDir,
       },
       limits: config.limits,
+      tunnel: {
+        enabled: Boolean(config.tunnel?.enabled),
+        allowedCidrs: config.tunnel?.allowedCidrs || [],
+        allowedPorts: config.tunnel?.allowedPorts || [],
+      },
       security: {
         allowedUploadRoots: config.security.allowedUploadRoots,
         requireApprovalForDangerous: config.security.requireApprovalForDangerous,
       },
     });
+  });
+
+  app.get('/api/agent-versions', (_req, res) => {
+    const manifest = loadManifest();
+    if (!manifest) {
+      return res.status(404).json({ success: false, message: 'agent manifest not found' });
+    }
+    res.json({ success: true, ...manifest });
+  });
+
+  app.post('/api/clients/:id/upgrade', (req, res) => {
+    const result = requestUpgrade({
+      config,
+      store,
+      gateway,
+      clientId: req.params.id,
+      logger,
+    });
+    if (result.error) {
+      const status = result.error === 'client not found' ? 404 : result.error === 'client is offline' ? 409 : 400;
+      return res.status(status).json({ success: false, message: result.error });
+    }
+    res.json({ success: true, ...result });
+  });
+
+  app.get('/api/tunnels', (req, res) => {
+    const clientId = String(req.query.clientId || '').trim();
+    const list = tunnels.list().filter((item) => !clientId || item.clientId === clientId);
+    res.json({ success: true, count: list.length, tunnels: list });
+  });
+
+  app.post('/api/tunnels/:id/close', (req, res) => {
+    const ok = tunnels.close(String(req.params.id || ''));
+    if (!ok) return res.status(404).json({ success: false, message: 'tunnel not found' });
+    res.json({ success: true });
+  });
+
+  app.post('/api/clients/:id/tunnel-command', (req, res) => {
+    const agent = store.findAgent(req.params.id);
+    if (!agent) return res.status(404).json({ success: false, message: 'client not found' });
+    const forwards = Array.isArray(req.body?.forwards) ? req.body.forwards : [];
+    if (!forwards.length) {
+      return res.status(400).json({ success: false, message: 'forwards is required' });
+    }
+    const parts = [];
+    for (const item of forwards.slice(0, 16)) {
+      const local = Number(item.local);
+      const port = Number(item.port);
+      const host = String(item.host || '127.0.0.1').trim();
+      if (!Number.isInteger(local) || local <= 0 || local > 65535) {
+        return res.status(400).json({ success: false, message: `invalid local port: ${item.local}` });
+      }
+      if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+        return res.status(400).json({ success: false, message: `invalid target port: ${item.port}` });
+      }
+      if (!host) {
+        return res.status(400).json({ success: false, message: 'target host is required' });
+      }
+      parts.push(`--forward ${local}=${host}:${port}`);
+    }
+    let serverUrl = String(config.hub.publicUrl || '').replace(/\/agent$/, '/agent/tunnel');
+    if (!/\/agent\/tunnel$/.test(serverUrl)) serverUrl = `${serverUrl.replace(/\/+$/, '')}/agent/tunnel`;
+    const command = [
+      'ops-agent.exe tunnel',
+      `--server ${serverUrl}`,
+      `--token ${config.tunnel.token}`,
+      `--client ${agent.id}`,
+      ...parts,
+    ].join(' ');
+    res.json({ success: true, command, serverUrl, forwards: forwards.length });
   });
 
   app.get('/api/downloads', (_req, res) => {
@@ -387,7 +470,7 @@ export async function startHub(config) {
   });
 
   // MCP endpoint
-  app.use(createMcpRouter({ config, gateway, jobs, files, store, logger }));
+  app.use(createMcpRouter({ config, gateway, jobs, files, store, logger, tunnels }));
 
   // 静态管理界面
   app.use(express.static(path.join(PROJECT_ROOT, 'public'), { index: 'index.html' }));
@@ -439,8 +522,17 @@ export async function startHub(config) {
     clearInterval(pruneTimer);
     clearInterval(packageCleanupTimer);
     logger.info('shutting down...');
+    tunnels.close();
     gateway.close();
     store.close();
+    if (typeof server.closeAllConnections === 'function') server.closeAllConnections();
+    for (const socket of sockets) {
+      try {
+        socket.destroy();
+      } catch {
+        // ignore
+      }
+    }
     await new Promise((resolve) => server.close(resolve));
   };
 
@@ -451,6 +543,7 @@ export async function startHub(config) {
     gateway,
     jobs,
     files,
+    tunnels,
     logger,
     close,
     address,

@@ -131,6 +131,8 @@
             </div>
             <div class="client-head-actions">
               <span id="client-badge" class="badge">offline</span>
+              <button id="upgrade-client-btn" class="ghost">升级</button>
+              <button id="tunnel-btn" class="ghost">端口转发</button>
               <button id="refresh-client-btn" class="ghost">刷新信息</button>
               <button id="delete-client-btn" class="ghost danger">删除</button>
             </div>
@@ -233,6 +235,32 @@
           </section>
         </div>
       </main>
+    </div>
+  </div>
+
+  <div id="tunnel-backdrop" class="dialog-backdrop hidden">
+    <div class="dialog-card tunnel-card" role="dialog" aria-modal="true" aria-labelledby="tunnel-title">
+      <div class="dialog-icon">⇄</div>
+      <h3 id="tunnel-title">端口转发</h3>
+      <p class="dialog-message muted">在本地 127.0.0.1 开一个端口，通过当前客户端访问目标 TCP 端口。命令在你自己电脑上运行。</p>
+      <div class="tunnel-form">
+        <label>本地端口<input id="tunnel-local" class="dialog-input" value="13306" autocomplete="off" /></label>
+        <label>目标地址<input id="tunnel-host" class="dialog-input" value="127.0.0.1" autocomplete="off" /></label>
+        <label>目标端口<input id="tunnel-port" class="dialog-input" value="3306" autocomplete="off" /></label>
+      </div>
+      <button id="tunnel-generate" class="primary-btn">生成命令</button>
+      <pre id="tunnel-command" class="tunnel-command hidden"></pre>
+      <div id="tunnel-actions" class="tunnel-actions hidden">
+        <button id="tunnel-copy" class="ghost">复制命令</button>
+      </div>
+      <div class="tunnel-head">
+        <h4>活跃隧道</h4>
+        <button id="tunnel-refresh" class="ghost">刷新</button>
+      </div>
+      <div id="tunnel-list" class="tunnel-list muted">暂无</div>
+      <div class="dialog-actions">
+        <button id="tunnel-close" class="dialog-btn ghost">关闭</button>
+      </div>
     </div>
   </div>
 

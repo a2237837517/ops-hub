@@ -31,6 +31,7 @@ type Incoming struct {
 	Tags            []string          `json:"tags"`
 	EnrollmentToken string            `json:"enrollmentToken"`
 	AgentToken      string            `json:"agentToken"`
+	URL             string            `json:"url"`
 	HeartbeatSec    int               `json:"heartbeatIntervalSec"`
 	Jobs            []map[string]any  `json:"jobs"`
 	Message         string            `json:"message"`
@@ -79,6 +80,9 @@ type Agent struct {
 	uploadsMu sync.Mutex
 	downloads map[string]*DownloadTransfer
 	downMu    sync.Mutex
+
+	streams   map[uint32]*agentStream
+	streamsMu sync.Mutex
 }
 
 func NewAgent(cfg *Config, logger *Logger) *Agent {
@@ -88,6 +92,7 @@ func NewAgent(cfg *Config, logger *Logger) *Agent {
 		jobs:      make(map[string]*Job),
 		uploads:   make(map[string]*UploadTransfer),
 		downloads: make(map[string]*DownloadTransfer),
+		streams:   make(map[uint32]*agentStream),
 	}
 }
 
@@ -175,6 +180,7 @@ func (a *Agent) connectAndServe(ctx context.Context) error {
 		a.mu.Unlock()
 		_ = conn.Close()
 		a.stopHeartbeat()
+		a.closeAllStreams()
 	}()
 
 	a.log.Infof("已连接 %s", a.cfg.Server)
@@ -183,9 +189,13 @@ func (a *Agent) connectAndServe(ctx context.Context) error {
 	}
 
 	for {
-		_, raw, err := conn.ReadMessage()
+		msgType, raw, err := conn.ReadMessage()
 		if err != nil {
 			return err
+		}
+		if msgType == websocket.BinaryMessage {
+			a.handleStreamFrame(raw)
+			continue
 		}
 		var msg Incoming
 		if err := json.Unmarshal(raw, &msg); err != nil {
@@ -262,6 +272,8 @@ func (a *Agent) handleMessage(msg Incoming) {
 		a.log.Infof("注册成功 clientId=%s", a.cfg.ClientID)
 		a.startHeartbeat()
 		_ = a.send(map[string]any{"type": "agent.info", "info": collectInfo(nil)})
+	case "agent.upgrade":
+		go a.handleUpgrade(msg)
 	case "hello_error":
 		a.log.Errorf("注册失败: %s", msg.Message)
 	case "heartbeat_ack":
@@ -307,6 +319,20 @@ func (a *Agent) send(v any) error {
 	}
 	_ = conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	return conn.WriteMessage(websocket.TextMessage, data)
+}
+
+func (a *Agent) sendBinary(data []byte) error {
+	a.sendMu.Lock()
+	defer a.sendMu.Unlock()
+	a.mu.Lock()
+	conn := a.conn
+	connected := a.connected
+	a.mu.Unlock()
+	if !connected || conn == nil {
+		return errors.New("not connected")
+	}
+	_ = conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
+	return conn.WriteMessage(websocket.BinaryMessage, data)
 }
 
 func (a *Agent) startHeartbeat() {

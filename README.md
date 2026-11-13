@@ -67,7 +67,7 @@ GitHub topics are configured on the repository page. The project is designed to 
 - Command jobs with on-disk spool, incremental output, byte offsets, timeout, cancel, and process-tree termination
 - Chunked file upload/download with SHA-256 and atomic writes
 - MCP server over **Streamable HTTP** (and legacy-compatible JSON-RPC behavior)
-- 15 MCP tools covering inventory, command execution, files, logs, and search
+- 22 MCP tools covering inventory, command execution, files, logs, search, tunnels, and upgrades
 - Web admin UI: clients, terminal, files, jobs, audit
 - Client list grouped by customer name (`config.json` → `name`), with per-machine status inside each group
 - Rename clients (Hub display name) and view OS/IP/CPU/memory/disk info
@@ -77,6 +77,8 @@ GitHub topics are configured on the repository page. The project is designed to 
 - JSON state persistence + JSONL audit log
 - Dangerous-command approval policy
 - Client revocation list with a **封禁管理** UI to unban client IDs
+- Local TCP port forwarding (`ops-agent tunnel`) over the existing `/agent` WebSocket path; MySQL/HTTP/RDP become `127.0.0.1:<port>`
+- Remote Agent upgrade from the Hub UI or `ops_agent_upgrade` (SHA-256 verified, automatic service restart)
 - No inbound connection to agents
 
 ### Agent (Go, single binary)
@@ -331,6 +333,78 @@ sudo ./uninstall-linux.sh
 - `proxy` supports `http://user:pass@proxy:8080`; `HTTP_PROXY`/`HTTPS_PROXY` are also honored.
 - `agentToken` is issued by the hub on first registration and stored in `agent-state.json`.
 - `insecureSkipVerify` is for testing only.
+
+---
+
+## Port Forwarding
+
+The Agent already has an outbound WebSocket under `/agent`. The tunnel reuses
+that nginx location, so **no nginx change, no new port, no new certificate**:
+
+```text
+wss://<hub>/agent/tunnel
+```
+
+Run the same `ops-agent` binary on your own computer:
+
+Enable it in `config.local.json` first (disabled by default):
+
+```json
+{
+  "tunnel": {
+    "enabled": true,
+    "token": "<random tunnel token>",
+    "allowedCidrs": ["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"],
+    "allowedPorts": [],
+    "maxStreamsPerTunnel": 16,
+    "idleTimeoutSec": 1800
+  }
+}
+```
+
+Then run the same `ops-agent` binary on your own computer:
+
+```bash
+ops-agent.exe tunnel \
+  --server wss://mcp.example.com/agent/tunnel \
+  --token <tunnelToken> \
+  --client <clientId> \
+  --forward 13306=127.0.0.1:3306 \
+  --forward 18080=192.168.11.30:80
+```
+
+Then connect locally:
+
+```text
+Navicat   -> 127.0.0.1:13306
+Browser   -> http://127.0.0.1:18080
+mstsc     -> 127.0.0.1:13389
+```
+
+The target is dialed by the Agent, so it can be `127.0.0.1` (the Agent machine)
+or any TCP address the Agent can reach. Targets are restricted to private
+CIDRs by default (`tunnel.allowedCidrs`); public targets require an explicit
+allowlist. UDP is not supported.
+
+The admin UI has a **端口转发** dialog that generates the command and lists
+active tunnels. MCP tools: `ops_tunnel_command`, `ops_tunnel_list`,
+`ops_tunnel_close`.
+
+---
+
+## Remote Upgrade
+
+The Hub serves raw Agent binaries and `manifest.json` under `/downloads/`.
+Click **升级** in the client header (or call `ops_agent_upgrade`) and the Agent:
+
+1. downloads the binary from the Hub's own host (URL host is validated)
+2. verifies its SHA-256 against the manifest
+3. writes `<exe>.new` and starts a detached updater
+4. the updater stops the service, replaces the binary (keeps `.bak`), and starts it again
+
+The Agent reconnects with the new `version`, which is shown in the client meta
+line. Upgrade requires the Agent to be online; a failed download or checksum
+leaves the running version untouched.
 
 ---
 

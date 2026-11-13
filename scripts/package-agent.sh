@@ -97,6 +97,33 @@ mkdir -p "$PUBLIC_DOWNLOADS"
 cp "$PKG_DIR"/*.zip "$PKG_DIR"/*.tar.gz "$PUBLIC_DOWNLOADS"/
 cp "$AGENT_DIR/config.example.json" "$PUBLIC_DOWNLOADS/config.example.json"
 
+# 远程升级用的原始二进制 + manifest
+cp "$DIST/agent/ops-agent-windows-amd64.exe" "$PUBLIC_DOWNLOADS/"
+cp "$DIST/agent/ops-agent-windows-386.exe" "$PUBLIC_DOWNLOADS/"
+cp "$DIST/agent/ops-agent-linux-amd64" "$PUBLIC_DOWNLOADS/"
+cp "$DIST/agent/ops-agent-linux-arm64" "$PUBLIC_DOWNLOADS/"
+cp "$DIST/agent/ops-agent-linux-386" "$PUBLIC_DOWNLOADS/"
+
+VERSION="$(grep -m1 'const Version' "$AGENT_DIR/config.go" | sed -E 's/.*"([^"]+)".*/\1/')"
+python3 - "$PUBLIC_DOWNLOADS" "$VERSION" <<'PYEOF'
+import hashlib, json, os, sys, datetime
+root, version = sys.argv[1], sys.argv[2]
+files = {
+    "windows-amd64": "ops-agent-windows-amd64.exe",
+    "windows-386": "ops-agent-windows-386.exe",
+    "linux-amd64": "ops-agent-linux-amd64",
+    "linux-arm64": "ops-agent-linux-arm64",
+    "linux-386": "ops-agent-linux-386",
+}
+manifest = {"version": version, "generatedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(), "files": {}}
+for key, name in files.items():
+    path = os.path.join(root, name)
+    digest = hashlib.sha256(open(path, "rb").read()).hexdigest()
+    manifest["files"][key] = {"name": name, "sha256": digest, "size": os.path.getsize(path)}
+open(os.path.join(root, "manifest.json"), "w").write(json.dumps(manifest, indent=2) + "\n")
+print("manifest:", version, len(manifest["files"]), "files")
+PYEOF
+
 echo
 echo "Agent 安装包:"
 ls -lh "$PKG_DIR"
