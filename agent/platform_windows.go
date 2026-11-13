@@ -173,6 +173,7 @@ func (h *serviceHandler) Execute(_ []string, requests <-chan svc.ChangeRequest, 
 		close(done)
 	}()
 	changes <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
+	go ensureServiceRecovery()
 	for request := range requests {
 		switch request.Cmd {
 		case svc.Interrogate:
@@ -239,6 +240,16 @@ func installService(configPath string) error {
 	}
 	fmt.Printf("服务 %s 已安装并启动\n", serviceName)
 	return nil
+}
+
+// ensureServiceRecovery 让老版本安装的服务也具备崩溃自动恢复能力。
+// 安装时已经设置过；这里每次启动再设一次，保证“替换 exe 升级”的机器也能修好。
+func ensureServiceRecovery() {
+	_ = exec.Command(
+		"sc.exe", "failure", serviceName,
+		"reset=", "86400",
+		"actions=", "restart/5000/restart/10000/restart/30000",
+	).Run()
 }
 
 func uninstallService() error {
