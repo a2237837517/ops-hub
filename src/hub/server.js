@@ -598,7 +598,7 @@ export async function startHub(config) {
     clearInterval(packageCleanupTimer);
     clearInterval(uploadCleanupTimer);
     logger.info('shutting down...');
-    tunnels.close();
+    tunnels.shutdown();
     gateway.close();
     store.close();
     if (typeof server.closeAllConnections === 'function') server.closeAllConnections();

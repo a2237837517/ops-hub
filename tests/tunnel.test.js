@@ -197,3 +197,52 @@ test('hub rejects a bad tunnel token', async (t) => {
   const code = await new Promise((resolve) => tunnel.once('close', resolve));
   assert.equal(code, 4003);
 });
+
+test('closing one tunnel via the API keeps the tunnel listener alive', async (t) => {
+  const { server: echo, port: echoPort } = await startEchoServer();
+  const { hub, port } = await startTestHub();
+  t.after(async () => {
+    await hub.close();
+    if (typeof echo.closeAllConnections === 'function') echo.closeAllConnections();
+    echo.close();
+  });
+  const { agent } = await connectFakeAgent(port);
+  t.after(() => agent.close());
+
+  const first = await connectTunnel(port);
+  t.after(() => first.close());
+  first.send(
+    encodeStreamFrame(
+      STREAM.OPEN,
+      11,
+      Buffer.from(JSON.stringify({ host: '127.0.0.1', port: echoPort })),
+    ),
+    { binary: true },
+  );
+  await waitForFrame(first, (frame) => frame.type === STREAM.OPEN_OK && frame.streamId === 11);
+
+  const list = await fetch(`http://127.0.0.1:${port}/api/tunnels`, {
+    headers: { Authorization: 'Bearer admin' },
+  }).then((response) => response.json());
+  assert.equal(list.count, 1);
+
+  const closed = await fetch(`http://127.0.0.1:${port}/api/tunnels/${list.tunnels[0].id}/close`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer admin' },
+  });
+  assert.equal(closed.status, 200);
+
+  // 关单条隧道不能把 WSS 一起关掉，否则这里会 503。
+  const second = await connectTunnel(port);
+  t.after(() => second.close());
+  second.send(
+    encodeStreamFrame(
+      STREAM.OPEN,
+      12,
+      Buffer.from(JSON.stringify({ host: '127.0.0.1', port: echoPort })),
+    ),
+    { binary: true },
+  );
+  const ok = await waitForFrame(second, (frame) => frame.type === STREAM.OPEN_OK && frame.streamId === 12);
+  assert.equal(ok.type, STREAM.OPEN_OK);
+});

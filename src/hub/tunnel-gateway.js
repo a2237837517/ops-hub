@@ -453,7 +453,8 @@ export class TunnelGateway {
     return true;
   }
 
-  close() {
+  // 注意：不能叫 close，否则会覆盖上面的 close(id)，关闭单条隧道时把整个 WSS 关掉。
+  shutdown() {
     clearInterval(this.idleTimer);
     for (const tunnel of [...this.tunnels.values()]) {
       try {
