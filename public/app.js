@@ -2,6 +2,7 @@
   const state = {
     token: localStorage.getItem('ops-hub-token') || '',
     clients: [],
+    latestVersion: '',
     selected: null,
     view: 'clients',
     currentJob: null,
@@ -150,6 +151,9 @@
       alert(`已下发升级：${result.from || '?'} → ${result.to}\n约 10-30 秒后客户端会自动上线。`);
       setTimeout(() => loadClients().catch(() => {}), 5000);
       setTimeout(() => loadClients().catch(() => {}), 15000);
+      setTimeout(() => {
+        if (state.selected?.id === result.clientId) refreshClientInfo().catch(() => {});
+      }, 15000);
     } catch (error) {
       alert(`升级失败: ${error.message}`);
     }
@@ -411,6 +415,7 @@
       await api('/api/auth/check');
       showApp();
       await loadClients();
+      loadAgentVersions().catch(() => {});
     } catch (error) {
       localStorage.removeItem('ops-hub-token');
       state.token = '';
@@ -477,10 +482,13 @@
               client.displayName && client.displayName !== group
                 ? client.displayName
                 : client.hostname || client.id;
+            const outdated = Boolean(
+              state.latestVersion && client.version && client.version !== state.latestVersion,
+            );
             return `
         <div class="client-item ${state.selected?.id === client.id ? 'active' : ''}" data-id="${escapeHtml(client.id)}">
           <div class="name"><span class="dot ${client.status}"></span>${escapeHtml(label)}</div>
-          <div class="meta">${client.primaryIp ? `IP ${escapeHtml(client.primaryIp)} · ` : ''}${escapeHtml(client.os || '')} ${escapeHtml(client.arch || '')} · ${escapeHtml(client.status)}</div>
+          <div class="meta">${client.primaryIp ? `IP ${escapeHtml(client.primaryIp)} · ` : ''}${escapeHtml(client.os || '')} ${escapeHtml(client.arch || '')}${client.version ? ` · v${escapeHtml(client.version)}${outdated ? ' ↑' : ''}` : ''} · ${escapeHtml(client.status)}</div>
           <div class="meta client-id">${escapeHtml(client.id)}</div>
         </div>`;
           })
@@ -604,10 +612,13 @@
       state.selected.os,
       state.selected.arch,
       state.selected.primaryIp,
+      state.selected.version ? `v${state.selected.version}` : '',
       state.selected.info?.hostname ? `host=${state.selected.info.hostname}` : '',
       state.selected.info?.uptimeSec ? `uptime=${Math.floor(state.selected.info.uptimeSec / 3600)}h` : '',
     ].filter(Boolean).join(' · ');
     renderClientInfo();
+    renderVersionBadge();
+    renderDiskChips();
     renderClients();
   }
 
@@ -634,6 +645,69 @@
       renderClients();
     } catch (error) {
       alert(`重命名失败: ${error.message}`);
+    }
+  }
+
+  async function loadAgentVersions() {
+    try {
+      const data = await api('/api/agent-versions');
+      state.latestVersion = data.version || '';
+    } catch {
+      state.latestVersion = '';
+    }
+    renderVersionBadge();
+    renderClients();
+  }
+
+  function renderVersionBadge() {
+    const el = $('client-version');
+    if (!el) return;
+    if (!state.selected) {
+      el.className = 'badge version hidden';
+      el.textContent = 'v-';
+      return;
+    }
+    const version = String(state.selected.version || '');
+    const latest = state.latestVersion;
+    const outdated = Boolean(latest && version && version !== latest);
+    el.className = `badge version ${outdated ? 'outdated' : 'latest'}`;
+    el.textContent = version ? `v${version}` : 'v?';
+    el.title = outdated ? `可升级到 v${latest}，点击升级` : '已是最新版本';
+    el.onclick = outdated ? () => upgradeClient() : null;
+  }
+
+  function renderDiskChips() {
+    const wrap = $('file-disks');
+    if (!wrap) return;
+    const disks = state.selected?.info?.disks || [];
+    if (!disks.length) {
+      wrap.classList.add('hidden');
+      wrap.innerHTML = '';
+      return;
+    }
+    const win = isWindows(state.selected);
+    wrap.classList.remove('hidden');
+    wrap.innerHTML = disks
+      .map((disk) => {
+        const device = String(disk.device || '').trim();
+        const mount = String(disk.mountpoint || '').trim();
+        const label = win ? device || mount : mount || device;
+        if (!label) return '';
+        const diskPath = win ? (label.endsWith('\\') ? label : `${label}\\`) : label;
+        const total = Number(disk.total) || 0;
+        const free = Number(disk.free) || 0;
+        const percent = Number(disk.percent) || (total ? Math.round(((total - free) / total) * 100) : 0);
+        return `<button class="disk-chip ${percent >= 90 ? 'warn' : ''}" data-disk-path="${escapeHtml(diskPath)}" title="${escapeHtml(label)} 已用 ${percent}%">
+          <span class="disk-name">${escapeHtml(label)}</span>
+          <span class="disk-meta">${percent}% · ${formatBytes(free)} 可用</span>
+        </button>`;
+      })
+      .join('');
+    for (const button of wrap.querySelectorAll('[data-disk-path]')) {
+      button.addEventListener('click', () => {
+        $('file-path').value = button.dataset.diskPath;
+        listFiles().catch((error) => alert(error.message));
+      });
     }
   }
 
@@ -672,6 +746,8 @@
     badge.textContent = state.selected.status;
     badge.className = `badge ${state.selected.status}`;
     renderClientInfo();
+    renderVersionBadge();
+    renderDiskChips();
     $('file-path').value = isWindows(state.selected) ? 'C:\\' : '/';
     state.filePath = $('file-path').value;
     state.selectedFile = null;
@@ -1629,6 +1705,7 @@
       await api('/api/auth/check');
       showApp();
       await loadClients();
+      loadAgentVersions().catch(() => {});
       setInterval(() => loadClients().catch(() => {}), 15000);
     } catch {
       showLogin();

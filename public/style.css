@@ -108,6 +108,22 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .client-head-actions { display: flex; align-items: center; gap: 10px; }
 .badge { padding: 3px 9px; border-radius: 999px; background: #3a2222; color: #ffb3b3; font-size: 12px; }
 .badge.online { background: #153a2c; color: var(--green); }
+.badge.version { background: #1b2733; color: #9fb3c8; }
+.badge.version.latest { background: #153a2c; color: var(--green); }
+.badge.version.outdated { background: #3a2f14; color: #ffcc66; cursor: pointer; }
+.badge.version.outdated:hover { box-shadow: 0 0 0 1px #7a5a1a inset; }
+.file-disks { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.disk-chip {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 7px 11px; border-radius: 9px;
+  border: 1px solid var(--border); background: var(--panel-2);
+  color: var(--text); font-size: 12px; text-align: left; cursor: pointer;
+}
+.disk-chip:hover { border-color: var(--accent); }
+.disk-chip.warn { border-color: #7a3b2a; }
+.disk-chip.warn .disk-meta { color: #ffb3a0; }
+.disk-chip .disk-name { font-weight: 600; }
+.disk-chip .disk-meta { color: var(--muted); font-size: 11px; }
 
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 18px 0 14px; }
 .tab { background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0; color: var(--muted); }

@@ -131,6 +131,7 @@
             </div>
             <div class="client-head-actions">
               <span id="client-badge" class="badge">offline</span>
+              <span id="client-version" class="badge version hidden">v-</span>
               <button id="upgrade-client-btn" class="ghost">升级</button>
               <button id="tunnel-btn" class="ghost">端口转发</button>
               <button id="refresh-client-btn" class="ghost">刷新信息</button>
@@ -186,6 +187,7 @@
           </section>
 
           <section id="tab-files" class="tab-panel hidden">
+            <div id="file-disks" class="file-disks hidden"></div>
             <div class="file-controls">
               <input id="file-path" placeholder="客户端路径，如 C:\ 或 /var/log" />
               <input id="file-pattern" placeholder="*.log（可选）" />
