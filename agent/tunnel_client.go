@@ -197,6 +197,18 @@ func (c *tunnelClient) connectAndServe(ctx context.Context) error {
 	c.mu.Lock()
 	c.conn = conn
 	c.mu.Unlock()
+
+	// Ctrl+C / SIGTERM 时主动关闭 WebSocket，否则 ReadMessage 会一直阻塞，进程退不掉。
+	connDone := make(chan struct{})
+	defer close(connDone)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+		case <-connDone:
+		}
+	}()
+
 	defer func() {
 		c.mu.Lock()
 		if c.conn == conn {
@@ -268,32 +280,8 @@ func (c *tunnelClient) handleLocal(conn net.Conn, forward tunnelForward) {
 		c.mu.Unlock()
 	}()
 
-	payload, _ := json.Marshal(streamOpenRequest{
-		Host:      forward.Host,
-		Port:      forward.Port,
-		LocalPort: forward.Local,
-	})
-	if err := c.sendFrame(streamOpen, id, payload); err != nil {
-		_ = conn.Close()
-		return
-	}
-
-	select {
-	case result := <-resultCh:
-		if !result.ok {
-			fmt.Fprintf(os.Stderr, "[tunnel] %s:%d 打开失败: %s\n", forward.Host, forward.Port, result.msg)
-			_ = conn.Close()
-			return
-		}
-	case <-time.After(15 * time.Second):
-		fmt.Fprintf(os.Stderr, "[tunnel] %s:%d 打开超时\n", forward.Host, forward.Port)
-		_ = conn.Close()
-		return
-	case <-c.closed:
-		_ = conn.Close()
-		return
-	}
-
+	// 先注册 stream 再发 OPEN：MySQL/SSH 这类服务在 TCP 建连后立刻发 greeting，
+	// 如果等 OPEN_OK 再注册，第一批 DATA 会被丢掉，表现为 handshake 超时。
 	stream := &localStream{
 		conn: conn,
 		ch:   make(chan []byte, 64),
@@ -303,6 +291,32 @@ func (c *tunnelClient) handleLocal(conn net.Conn, forward tunnelForward) {
 	c.streams[id] = stream
 	c.mu.Unlock()
 	go stream.writeLoop()
+
+	payload, _ := json.Marshal(streamOpenRequest{
+		Host:      forward.Host,
+		Port:      forward.Port,
+		LocalPort: forward.Local,
+	})
+	if err := c.sendFrame(streamOpen, id, payload); err != nil {
+		c.removeStream(id)
+		return
+	}
+
+	select {
+	case result := <-resultCh:
+		if !result.ok {
+			fmt.Fprintf(os.Stderr, "[tunnel] %s:%d 打开失败: %s\n", forward.Host, forward.Port, result.msg)
+			c.removeStream(id)
+			return
+		}
+	case <-time.After(15 * time.Second):
+		fmt.Fprintf(os.Stderr, "[tunnel] %s:%d 打开超时\n", forward.Host, forward.Port)
+		c.removeStream(id)
+		return
+	case <-c.closed:
+		c.removeStream(id)
+		return
+	}
 
 	buf := make([]byte, 32*1024)
 	for {

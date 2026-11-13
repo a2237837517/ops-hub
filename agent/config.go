@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const Version = "0.1.18"
+const Version = "0.1.20"
 
 type Config struct {
 	Server               string   `json:"server"`
