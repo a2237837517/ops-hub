@@ -75,13 +75,18 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .sidebar-head input { flex: 1; min-width: 0; }
 .client-list { overflow: auto; padding: 8px; }
 .client-item {
-  padding: 10px 12px; border-radius: 8px; cursor: pointer;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer;
   border: 1px solid transparent; margin-bottom: 4px;
 }
 .client-item:hover { background: var(--panel-2); }
 .client-item.active { background: #12293a; border-color: #24506c; }
-.client-item .name { font-weight: 600; display: flex; align-items: center; gap: 8px; }
-.client-item .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.client-item .name { font-weight: 600; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.client-item .meta {
+  color: var(--muted); font-size: 11.5px; margin-top: 2px; line-height: 1.4;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.version-tag { color: var(--muted); }
+.version-tag.outdated { color: var(--yellow); }
 .client-group { margin-bottom: 6px; }
 .client-group-head {
   width: 100%; display: flex; align-items: center; gap: 8px;
@@ -97,31 +102,38 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .client-group-head .group-arrow { color: var(--muted); width: 10px; }
 .client-group.collapsed .client-group-body { display: none; }
 .client-group-body { padding-left: 6px; }
-.client-id { opacity: .7; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--red); flex: 0 0 8px; }
 .dot.online { background: var(--green); box-shadow: 0 0 6px rgba(61,220,151,.7); }
 
 .main { flex: 1; min-width: 0; overflow: auto; padding: 18px; }
 .empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--muted); }
-.client-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.client-head h2 { margin: 0 0 4px; }
-.client-head-actions { display: flex; align-items: center; gap: 10px; }
+.client-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+}
+.client-head h2 { margin: 0; font-size: 22px; }
+.client-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.client-head-actions button { white-space: nowrap; flex-shrink: 0; padding: 6px 11px; }
+.client-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; font-size: 12px; }
+.client-meta .meta-item { display: inline-flex; align-items: center; white-space: nowrap; }
+.client-meta .meta-item + .meta-item::before { content: '·'; color: #39485a; margin-right: 6px; }
 .badge { padding: 3px 9px; border-radius: 999px; background: #3a2222; color: #ffb3b3; font-size: 12px; }
 .badge.online { background: #153a2c; color: var(--green); }
-.badge.version { background: #1b2733; color: #9fb3c8; }
+.badge.version { padding: 2px 8px; font-size: 11px; background: #1b2733; color: #9fb3c8; }
 .badge.version.latest { background: #153a2c; color: var(--green); }
 .badge.version.outdated { background: #3a2f14; color: #ffcc66; cursor: pointer; }
 .badge.version.outdated:hover { box-shadow: 0 0 0 1px #7a5a1a inset; }
-.file-disks { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.file-disks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+.file-disks::before { content: '磁盘'; color: var(--muted); font-size: 12px; margin-right: 2px; }
 .disk-chip {
-  display: flex; flex-direction: column; gap: 2px;
-  padding: 7px 11px; border-radius: 9px;
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 5px 10px; border-radius: 999px;
   border: 1px solid var(--border); background: var(--panel-2);
-  color: var(--text); font-size: 12px; text-align: left; cursor: pointer;
+  color: var(--text); font-size: 12px; white-space: nowrap; cursor: pointer;
 }
 .disk-chip:hover { border-color: var(--accent); }
-.disk-chip.warn { border-color: #7a3b2a; }
-.disk-chip.warn .disk-meta { color: #ffb3a0; }
+.disk-chip.warn { border-color: #6d3030; }
+.disk-chip.warn .disk-name, .disk-chip.warn .disk-meta { color: #ffb3a0; }
 .disk-chip .disk-name { font-weight: 600; }
 .disk-chip .disk-meta { color: var(--muted); font-size: 11px; }
 
@@ -129,7 +141,11 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .tab { background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0; color: var(--muted); }
 .tab.active { color: var(--text); border-bottom-color: var(--accent); }
 
-.terminal-controls, .command-row, .file-controls { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; flex-wrap: wrap; }
+.terminal-controls, .command-row { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; flex-wrap: wrap; }
+.file-controls { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; flex-wrap: nowrap; }
+.file-controls #file-path { flex: 1; min-width: 140px; }
+.file-controls #file-pattern { width: 150px; flex: 0 0 150px; }
+.file-controls button { white-space: nowrap; flex-shrink: 0; }
 .command-row input { flex: 1; min-width: 240px; }
 .command-row button#run-btn { background: var(--accent); color: #07121b; border-color: var(--accent); font-weight: 600; }
 .check { display: flex; align-items: center; gap: 6px; color: var(--muted); white-space: nowrap; }
@@ -142,6 +158,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
   font: 13px/1.45 "JetBrains Mono", Consolas, "Courier New", monospace;
 }
 .terminal-output.small { min-height: 240px; max-height: 52vh; }
+#file-output:empty::before { content: '选择左侧文件预览'; color: var(--muted); }
 
 .file-layout { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.4fr); gap: 14px; }
 .file-list { border: 1px solid var(--border); border-radius: 8px; overflow: auto; max-height: 58vh; }
@@ -161,6 +178,10 @@ td.command { max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
 .status-failed, .status-lost, .status-interrupted { color: var(--red); }
 .status-running, .status-disconnected { color: var(--yellow); }
 
+@media (max-width: 1100px) {
+  .client-head-actions { flex-wrap: wrap; justify-content: flex-end; }
+  .file-controls { flex-wrap: wrap; }
+}
 @media (max-width: 900px) {
   .sidebar { width: 220px; flex-basis: 220px; }
   .file-layout { grid-template-columns: 1fr; }
@@ -362,7 +383,7 @@ td.command { max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
 .terminal-hint { margin-top: 8px; font-size: 12px; }
 
 /* Client info cards */
-.client-title-row { display: flex; align-items: center; gap: 8px; }
+.client-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .icon-btn {
   padding: 3px 8px;
   background: transparent;

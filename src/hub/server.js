@@ -59,19 +59,26 @@ export async function startHub(config) {
 
   const downloadsDir = path.join(PROJECT_ROOT, 'public', 'downloads');
 
+  const isPrivateIp = (ip) =>
+    /^10\./.test(ip) ||
+    /^192\.168\./.test(ip) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(ip);
+
   const extractPrimaryIp = (agent) => {
     const interfaces = agent?.info?.network;
+    const candidates = [];
     if (Array.isArray(interfaces)) {
       for (const iface of interfaces) {
         for (const addr of iface.addrs || []) {
           const value = String(addr).split('/')[0];
-          if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value) && !value.startsWith('127.')) {
-            return value;
-          }
+          if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) continue;
+          if (value.startsWith('127.') || value.startsWith('169.254.') || value === '0.0.0.0') continue;
+          candidates.push(value);
         }
       }
     }
-    return String(agent?.remoteAddress || '').replace(/^::ffff:/, '');
+    // 优先展示真正的内网地址，避免把 169.254.x 这种自动地址当成主 IP。
+    return candidates.find(isPrivateIp) || candidates[0] || String(agent?.remoteAddress || '').replace(/^::ffff:/, '');
   };
 
   const withDisplay = (agent, includeInfo = true) => {

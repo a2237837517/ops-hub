@@ -34,6 +34,17 @@
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;');
   }
+  function shorten(value, max = 40) {
+    const text = String(value || '');
+    return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+  }
+
+  function shortOs(value) {
+    let text = String(value || '').replace(/^(windows|linux)\s+/i, '');
+    if (/windows/i.test(text)) text = text.replace(/\s+\d+(\.\d+)+.*$/, '');
+    return shorten(text.trim(), 34);
+  }
+
 
   function showLogin(message = '') {
     login.classList.remove('hidden');
@@ -485,11 +496,18 @@
             const outdated = Boolean(
               state.latestVersion && client.version && client.version !== state.latestVersion,
             );
+            const version = client.version
+              ? `<span class="version-tag ${outdated ? 'outdated' : ''}">v${escapeHtml(client.version)}${outdated ? ' ↑' : ''}</span>`
+              : '';
+            const ip = client.primaryIp ? `IP ${escapeHtml(client.primaryIp)}` : '';
+            const line = [ip, version].filter(Boolean).join(' · ');
+            const fullOs = client.info?.platform || client.os || '';
+            const platform = shortOs(fullOs);
             return `
         <div class="client-item ${state.selected?.id === client.id ? 'active' : ''}" data-id="${escapeHtml(client.id)}">
           <div class="name"><span class="dot ${client.status}"></span>${escapeHtml(label)}</div>
-          <div class="meta">${client.primaryIp ? `IP ${escapeHtml(client.primaryIp)} · ` : ''}${escapeHtml(client.os || '')} ${escapeHtml(client.arch || '')}${client.version ? ` · v${escapeHtml(client.version)}${outdated ? ' ↑' : ''}` : ''} · ${escapeHtml(client.status)}</div>
-          <div class="meta client-id">${escapeHtml(client.id)}</div>
+          ${line ? `<div class="meta">${line}</div>` : ''}
+          ${platform ? `<div class="meta" title="${escapeHtml(fullOs)}">${escapeHtml(platform)}</div>` : ''}
         </div>`;
           })
           .join('');
@@ -607,15 +625,7 @@
     const data = await api(`/api/clients/${encodeURIComponent(state.selected.id)}?refresh=1`);
     state.selected = data.client;
     $('client-name').textContent = state.selected.displayName || state.selected.name || state.selected.hostname || state.selected.id;
-    $('client-meta').textContent = [
-      state.selected.id,
-      state.selected.os,
-      state.selected.arch,
-      state.selected.primaryIp,
-      state.selected.version ? `v${state.selected.version}` : '',
-      state.selected.info?.hostname ? `host=${state.selected.info.hostname}` : '',
-      state.selected.info?.uptimeSec ? `uptime=${Math.floor(state.selected.info.uptimeSec / 3600)}h` : '',
-    ].filter(Boolean).join(' · ');
+    renderClientMeta();
     renderClientInfo();
     renderVersionBadge();
     renderDiskChips();
@@ -674,6 +684,23 @@
     el.textContent = version ? `v${version}` : 'v?';
     el.title = outdated ? `可升级到 v${latest}，点击升级` : '已是最新版本';
     el.onclick = outdated ? () => upgradeClient() : null;
+
+    const button = $('upgrade-client-btn');
+    if (button) {
+      if (outdated) {
+        button.disabled = false;
+        button.textContent = '升级';
+        button.title = `升级到 v${latest}`;
+      } else if (version && latest) {
+        button.disabled = true;
+        button.textContent = '已最新';
+        button.title = '已是最新版本';
+      } else {
+        button.disabled = false;
+        button.textContent = '升级';
+        button.title = '升级客户端';
+      }
+    }
   }
 
   function renderDiskChips() {
@@ -696,10 +723,11 @@
         const diskPath = win ? (label.endsWith('\\') ? label : `${label}\\`) : label;
         const total = Number(disk.total) || 0;
         const free = Number(disk.free) || 0;
-        const percent = Number(disk.percent) || (total ? Math.round(((total - free) / total) * 100) : 0);
-        return `<button class="disk-chip ${percent >= 90 ? 'warn' : ''}" data-disk-path="${escapeHtml(diskPath)}" title="${escapeHtml(label)} 已用 ${percent}%">
+        const percent = Math.round(Number(disk.percent) || (total ? ((total - free) / total) * 100 : 0));
+        const freeText = total ? ` · ${formatBytes(free)}` : '';
+        return `<button class="disk-chip ${percent >= 90 ? 'warn' : ''}" data-disk-path="${escapeHtml(diskPath)}" title="${escapeHtml(label)} 已用 ${percent}%，剩余 ${formatBytes(free)}">
           <span class="disk-name">${escapeHtml(label)}</span>
-          <span class="disk-meta">${percent}% · ${formatBytes(free)} 可用</span>
+          <span class="disk-meta">${percent}%${freeText}</span>
         </button>`;
       })
       .join('');
@@ -709,6 +737,26 @@
         listFiles().catch((error) => alert(error.message));
       });
     }
+  }
+
+  function renderClientMeta() {
+    if (!state.selected) return;
+    const info = state.selected.info || {};
+    const platform = shortOs(info.platform || state.selected.os || '');
+    const parts = [];
+    if (state.selected.primaryIp) {
+      parts.push(`<span class="meta-item">IP ${escapeHtml(state.selected.primaryIp)}</span>`);
+    }
+    if (platform) {
+      parts.push(`<span class="meta-item" title="${escapeHtml(platform)}">${escapeHtml(shorten(platform, 44))}</span>`);
+    }
+    if (info.uptimeSec) {
+      parts.push(`<span class="meta-item">运行 ${escapeHtml(formatUptime(info.uptimeSec))}</span>`);
+    }
+    if (info.hostname) {
+      parts.push(`<span class="meta-item">${escapeHtml(info.hostname)}</span>`);
+    }
+    $('client-meta').innerHTML = parts.join('');
   }
 
   async function selectClient(id) {
@@ -731,17 +779,7 @@
     $('empty').classList.add('hidden');
     $('client-view').classList.remove('hidden');
     $('client-name').textContent = state.selected.displayName || state.selected.name || state.selected.hostname || state.selected.id;
-    const info = state.selected.info || {};
-    const parts = [
-      state.selected.id,
-      state.selected.os,
-      state.selected.arch,
-      state.selected.primaryIp,
-      state.selected.version ? `v${state.selected.version}` : '',
-      info.hostname ? `host=${info.hostname}` : '',
-      info.uptimeSec ? `uptime=${Math.floor(info.uptimeSec / 3600)}h` : '',
-    ].filter(Boolean);
-    $('client-meta').textContent = parts.join(' · ');
+    renderClientMeta();
     const badge = $('client-badge');
     badge.textContent = state.selected.status;
     badge.className = `badge ${state.selected.status}`;
@@ -786,6 +824,14 @@
       }
     });
   }
+  $('copy-client-id').addEventListener('click', async () => {
+    if (!state.selected) return;
+    try {
+      await navigator.clipboard.writeText(state.selected.id);
+    } catch {
+      alert(state.selected.id);
+    }
+  });
   $('upgrade-client-btn').addEventListener('click', upgradeClient);
   $('tunnel-btn').addEventListener('click', showTunnel);
   $('tunnel-close').addEventListener('click', hideTunnel);
