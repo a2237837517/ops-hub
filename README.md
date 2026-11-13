@@ -254,6 +254,29 @@ C:\ProgramData\OpsHubAgent\agent-state.json
 
 Do not delete `agent-state.json` unless you intend to re-enroll the client.
 
+`clientId` is generated per machine (`hostname + hash(MachineGuid|hostname)`) and
+persisted in this file. If the file is copied to another machine (disk clone,
+VM template, manual copy), both machines would present the same `clientId` and
+the Hub would keep replacing one connection with the other.
+
+New Agents store a machine key in the state file and detect this automatically.
+They also recover from a lost state file: the Hub reissues an `agentToken` when
+the same machine presents the enrollment token and a matching fingerprint.
+
+For a full clone that keeps the same `MachineGuid` and SMBIOS UUID, reset the
+identity manually (this also generates a random suffix, so the clone no longer
+collides):
+
+```text
+sc stop OpsHubAgent
+ops-agent.exe reset-id --config "C:\path\to\config.json"
+sc start OpsHubAgent
+```
+
+The Hub rejects a `clientId` reconnecting from a different machine
+(`machine fingerprint mismatch`) and writes an `agent.id.conflict` audit record
+instead of silently kicking the live session.
+
 Uninstall:
 
 ```text

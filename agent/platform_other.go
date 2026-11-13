@@ -3,6 +3,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"os"
@@ -21,6 +23,15 @@ func defaultSpoolDir() string {
 func machineID() string {
 	hostname, _ := os.Hostname()
 	return hostname + "-" + firstMAC()
+}
+
+func machineKey() string {
+	sum := sha256.Sum256([]byte(machineID()))
+	return hex.EncodeToString(sum[:])
+}
+
+func machineFingerprint() string {
+	return machineKey()
 }
 
 func firstMAC() string {

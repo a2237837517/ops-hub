@@ -177,3 +177,129 @@ test('MCP endpoint rejects missing token and lists tools with token', async (t) 
   assert.match(text, /ops_exec/);
   assert.match(text, /ops_tail_file/);
 });
+
+async function connectAgent(port, hello) {
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/agent`);
+  await new Promise((resolve, reject) => {
+    ws.once('open', resolve);
+    ws.once('error', reject);
+  });
+  ws.send(JSON.stringify({ type: 'hello', protocolVersion: 1, jobs: [], ...hello }));
+  return ws;
+}
+
+test('hub rejects the same clientId from a different machine', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ops-hub-conflict-'));
+  const configFile = path.join(dir, 'config.json');
+  fs.writeFileSync(
+    configFile,
+    JSON.stringify({
+      hub: { host: '127.0.0.1', port: 0, dataDir: path.join(dir, 'data') },
+      auth: { enrollmentToken: 'enroll', mcpToken: 'mcp', adminToken: 'admin' },
+    }),
+  );
+  const hub = await startHub(loadConfig(configFile));
+  t.after(() => hub.close());
+  const port = hub.address.port;
+
+  const first = await connectAgent(port, {
+    clientId: 'conflict-agent',
+    hostname: 'host-a',
+    machineId: 'key-a',
+    machineFingerprint: 'fp-a',
+    enrollmentToken: 'enroll',
+  });
+  t.after(() => first.close());
+  const ack = await waitForMessage(first, (msg) => msg.type === 'hello_ack');
+
+  const second = await connectAgent(port, {
+    clientId: 'conflict-agent',
+    hostname: 'host-b',
+    machineId: 'key-b',
+    machineFingerprint: 'fp-b',
+    enrollmentToken: 'enroll',
+    agentToken: ack.agentToken,
+  });
+  t.after(() => second.close());
+
+  const error = await waitForMessage(second, (msg) => msg.type === 'hello_error');
+  assert.match(error.message, /another machine/);
+  assert.equal(first.readyState, WebSocket.OPEN);
+});
+
+test('hub replaces the previous connection for the same machine', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ops-hub-replace-'));
+  const configFile = path.join(dir, 'config.json');
+  fs.writeFileSync(
+    configFile,
+    JSON.stringify({
+      hub: { host: '127.0.0.1', port: 0, dataDir: path.join(dir, 'data') },
+      auth: { enrollmentToken: 'enroll', mcpToken: 'mcp', adminToken: 'admin' },
+    }),
+  );
+  const hub = await startHub(loadConfig(configFile));
+  t.after(() => hub.close());
+  const port = hub.address.port;
+
+  const first = await connectAgent(port, {
+    clientId: 'replace-agent',
+    hostname: 'host-a',
+    machineId: 'key-same',
+    machineFingerprint: 'fp-same',
+    enrollmentToken: 'enroll',
+  });
+  t.after(() => first.close());
+  const ack = await waitForMessage(first, (msg) => msg.type === 'hello_ack');
+
+  const closed = new Promise((resolve) => first.once('close', (code) => resolve(code)));
+  const second = await connectAgent(port, {
+    clientId: 'replace-agent',
+    hostname: 'host-a',
+    machineId: 'key-same',
+    machineFingerprint: 'fp-same',
+    enrollmentToken: 'enroll',
+    agentToken: ack.agentToken,
+  });
+  t.after(() => second.close());
+  await waitForMessage(second, (msg) => msg.type === 'hello_ack');
+
+  assert.equal(await closed, 4001);
+});
+
+
+test('hub reissues a token when the same machine lost its state', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ops-hub-recover-'));
+  const configFile = path.join(dir, 'config.json');
+  fs.writeFileSync(
+    configFile,
+    JSON.stringify({
+      hub: { host: '127.0.0.1', port: 0, dataDir: path.join(dir, 'data') },
+      auth: { enrollmentToken: 'enroll', mcpToken: 'mcp', adminToken: 'admin' },
+    }),
+  );
+  const hub = await startHub(loadConfig(configFile));
+  t.after(() => hub.close());
+  const port = hub.address.port;
+
+  const first = await connectAgent(port, {
+    clientId: 'recover-agent',
+    hostname: 'host-r',
+    machineId: 'key-r',
+    machineFingerprint: 'fp-r',
+    enrollmentToken: 'enroll',
+  });
+  t.after(() => first.close());
+  const firstAck = await waitForMessage(first, (msg) => msg.type === 'hello_ack');
+
+  const second = await connectAgent(port, {
+    clientId: 'recover-agent',
+    hostname: 'host-r',
+    machineId: 'key-r',
+    machineFingerprint: 'fp-r',
+    enrollmentToken: 'enroll',
+  });
+  t.after(() => second.close());
+  const secondAck = await waitForMessage(second, (msg) => msg.type === 'hello_ack');
+  assert.ok(secondAck.agentToken);
+  assert.notEqual(secondAck.agentToken, firstAck.agentToken);
+});

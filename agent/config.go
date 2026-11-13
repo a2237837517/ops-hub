@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const Version = "0.1.0"
+const Version = "0.1.15"
 
 type Config struct {
 	Server               string   `json:"server"`
@@ -32,11 +32,16 @@ type Config struct {
 	CAFile               string   `json:"caFile"`
 	Proxy                string   `json:"proxy"`
 	HeartbeatIntervalSec int      `json:"heartbeatIntervalSec"`
+
+	// StateReset 表示 agent-state.json 来自另一台机器，本次启动已丢弃旧身份。
+	StateReset bool `json:"-"`
 }
 
 type AgentState struct {
-	ClientID   string `json:"clientId"`
-	AgentToken string `json:"agentToken"`
+	ClientID           string `json:"clientId"`
+	AgentToken         string `json:"agentToken"`
+	MachineKey         string `json:"machineKey,omitempty"`
+	MachineFingerprint string `json:"machineFingerprint,omitempty"`
 }
 
 func DefaultConfig() *Config {
@@ -83,6 +88,12 @@ func LoadConfig(path string) (*Config, error) {
 	state := AgentState{}
 	if raw, err := os.ReadFile(statePath); err == nil {
 		_ = json.Unmarshal(raw, &state)
+	}
+	// 磁盘/目录被整机复制或克隆时，agent-state.json 会带着原机器的 clientId 和 agentToken。
+	// 指纹不一致说明这份状态不是本机的，直接丢弃重新注册，避免两台机器互相顶掉。
+	if state.ClientID != "" && state.MachineKey != "" && state.MachineKey != machineKey() {
+		cfg.StateReset = true
+		state = AgentState{}
 	}
 	if cfg.ClientID == "" {
 		cfg.ClientID = state.ClientID
@@ -150,7 +161,12 @@ func (c *Config) cleanupSpool() {
 }
 
 func (c *Config) SaveState() error {
-	state := AgentState{ClientID: c.ClientID, AgentToken: c.AgentToken}
+	state := AgentState{
+		ClientID:           c.ClientID,
+		AgentToken:         c.AgentToken,
+		MachineKey:         machineKey(),
+		MachineFingerprint: machineFingerprint(),
+	}
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return err

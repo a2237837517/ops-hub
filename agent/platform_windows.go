@@ -4,12 +4,16 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -41,6 +45,52 @@ func machineID() string {
 	}
 	hostname, _ := os.Hostname()
 	return hostname + "-" + firstMAC()
+}
+
+var (
+	firmwareUUIDOnce sync.Once
+	firmwareUUID     string
+)
+
+// firmwareUUIDValue 读取主板/虚拟机的 SMBIOS UUID。整机克隆后 MachineGuid 会重复，
+// 但虚拟化平台通常会重新生成 SMBIOS UUID，用它可以把两台机器区分开。
+func firmwareUUIDValue() string {
+	firmwareUUIDOnce.Do(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(ctx, "wmic", "csproduct", "get", "uuid", "/value").Output()
+		if err != nil {
+			return
+		}
+		for _, line := range strings.Split(string(out), "\n") {
+			line = strings.TrimSpace(line)
+			if len(line) > 5 && strings.EqualFold(line[:5], "UUID=") {
+				value := strings.TrimSpace(line[5:])
+				if value != "" && !strings.EqualFold(value, "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF") {
+					firmwareUUID = strings.ToUpper(value)
+				}
+				return
+			}
+		}
+	})
+	return firmwareUUID
+}
+
+// machineKey 是稳定的机器标识哈希，用于判断 agent-state.json 是否来自本机。
+func machineKey() string {
+	sum := sha256.Sum256([]byte(machineID()))
+	return hex.EncodeToString(sum[:])
+}
+
+// machineFingerprint 额外混入 SMBIOS UUID，用来识别整机克隆。
+// 拿不到固件 UUID 时返回空串，宁可少一次检测，也不要误判导致重新注册。
+func machineFingerprint() string {
+	uuid := firmwareUUIDValue()
+	if uuid == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(machineID() + "|" + uuid))
+	return hex.EncodeToString(sum[:])
 }
 
 func firstMAC() string {
@@ -111,6 +161,9 @@ func (h *serviceHandler) Execute(_ []string, requests <-chan svc.ChangeRequest, 
 		return false, 1
 	}
 	logger := NewLogger(cfg)
+	if cfg.StateReset {
+		logger.Warnf("agent-state.json 来自另一台机器，已丢弃旧身份并重新生成 clientId=%s", cfg.ClientID)
+	}
 	agent := NewAgent(cfg, logger)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

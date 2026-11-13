@@ -46,7 +46,9 @@ export class AgentGateway extends EventEmitter {
 
   _onConnection(ws, req) {
     ws.isAlive = true;
-    ws.remoteAddress = req.socket.remoteAddress;
+    // nginx 会带上 X-Real-IP；没有时退回直连地址。
+    const forwarded = String(req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    ws.remoteAddress = forwarded || req.socket.remoteAddress;
     ws.on('pong', () => {
       ws.isAlive = true;
     });
@@ -145,6 +147,8 @@ export class AgentGateway extends EventEmitter {
       fail('invalid clientId');
       return;
     }
+    const machineId = String(msg.machineId || '').slice(0, 200);
+    const machineFingerprint = String(msg.machineFingerprint || '').slice(0, 200);
     if (this.store.isRevoked(clientId)) {
       this.store.audit('agent.auth.failed', {
         clientId,
@@ -158,8 +162,37 @@ export class AgentGateway extends EventEmitter {
     let agent = this.store.getAgent(clientId);
     let issuedToken = null;
 
+    // 同一个 clientId 只能属于同一台机器。整机克隆/拷贝 agent-state.json 后，
+    // 第二台机器会带着同一个 clientId 连上来，此时拒绝并留下审计，避免两台互相顶掉。
+    if (
+      agent &&
+      ((agent.machineId && machineId && agent.machineId !== machineId) ||
+        (agent.machineFingerprint &&
+          machineFingerprint &&
+          agent.machineFingerprint !== machineFingerprint))
+    ) {
+      this.store.audit('agent.id.conflict', {
+        clientId,
+        remoteAddress: ws.remoteAddress,
+        reason: 'machine fingerprint mismatch',
+        hostname: String(msg.hostname || '').slice(0, 200),
+        knownHostname: String(agent.hostname || '').slice(0, 200),
+      });
+      fail('client id already used by another machine');
+      return;
+    }
+
     if (agent && agent.tokenHash) {
-      if (!msg.agentToken || hashToken(msg.agentToken) !== agent.tokenHash) {
+      const tokenOk = Boolean(msg.agentToken) && hashToken(msg.agentToken) === agent.tokenHash;
+      // 同一台机器丢了 agent-state.json（重装、还原、reset-id）时，允许用 enrollmentToken 换发新 token。
+      const canRecover =
+        !tokenOk &&
+        this.config.auth.enrollmentToken &&
+        msg.enrollmentToken === this.config.auth.enrollmentToken &&
+        agent.machineFingerprint &&
+        machineFingerprint &&
+        agent.machineFingerprint === machineFingerprint;
+      if (!tokenOk && !canRecover) {
         this.store.audit('agent.auth.failed', {
           clientId,
           remoteAddress: ws.remoteAddress,
@@ -167,6 +200,12 @@ export class AgentGateway extends EventEmitter {
         });
         fail('invalid agent token');
         return;
+      }
+      if (canRecover) {
+        issuedToken = randomToken(32);
+        agent.tokenHash = hashToken(issuedToken);
+        this.store.upsertAgent(agent);
+        this.store.audit('agent.token.reissued', { clientId, remoteAddress: ws.remoteAddress });
       }
     } else {
       if (!this.config.auth.enrollmentToken || msg.enrollmentToken !== this.config.auth.enrollmentToken) {
@@ -193,6 +232,8 @@ export class AgentGateway extends EventEmitter {
           tags: Array.isArray(msg.tags) ? msg.tags.map(String).slice(0, 30) : [],
           status: 'online',
           info: {},
+          machineId,
+          machineFingerprint,
           createdAt: nowIso(),
         };
       }
@@ -205,6 +246,7 @@ export class AgentGateway extends EventEmitter {
     // 同一个 clientId 只保留最新连接
     const old = this.connections.get(clientId);
     if (old && old.ws !== ws) {
+      this.logger.warn(`client ${clientId} 被新连接替换 (${ws.remoteAddress})`);
       try {
         old.ws.close(4001, 'replaced by new connection');
       } catch {
@@ -239,6 +281,8 @@ export class AgentGateway extends EventEmitter {
       os: String(msg.os || agent.os || '').slice(0, 100),
       arch: String(msg.arch || agent.arch || '').slice(0, 50),
       version: String(msg.version || agent.version || '').slice(0, 50),
+      machineId: machineId || agent.machineId || '',
+      machineFingerprint: machineFingerprint || agent.machineFingerprint || '',
       tags: Array.isArray(msg.tags) ? msg.tags.map(String).slice(0, 30) : agent.tags || [],
     });
 

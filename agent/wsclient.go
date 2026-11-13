@@ -98,12 +98,32 @@ func (a *Agent) Run(ctx context.Context) {
 	}()
 	backoff := time.Second
 	for ctx.Err() == nil {
+		startedAt := time.Now()
 		err := a.connectAndServe(ctx)
 		if ctx.Err() != nil {
 			break
 		}
 		if err != nil {
 			a.log.Warnf("连接断开: %v", err)
+		}
+		// 稳定连接过一段时间后重新从 1s 开始退避，避免长时间运行后重连要等 60s。
+		if time.Since(startedAt) > 60*time.Second {
+			backoff = time.Second
+		}
+		var closeErr *websocket.CloseError
+		if errors.As(err, &closeErr) {
+			switch closeErr.Code {
+			case 4001:
+				if backoff < 30*time.Second {
+					backoff = 30 * time.Second
+				}
+				a.log.Warnf(
+					"clientId %s 已被另一个连接顶掉；如果这是复制/克隆的机器，请先停止服务再执行 ops-agent reset-id",
+					a.cfg.ClientID,
+				)
+			case 4003:
+				a.log.Warnf("服务端拒绝连接: %s", closeErr.Text)
+			}
 		}
 		delay := backoff + time.Duration(rand.Int63n(int64(backoff/2+1)))
 		if delay > 60*time.Second {
@@ -210,18 +230,20 @@ func (a *Agent) sendHello() error {
 	hostname, _ := os.Hostname()
 	info := basicHostInfo()
 	return a.send(map[string]any{
-		"type":            "hello",
-		"protocolVersion": 1,
-		"clientId":        a.cfg.ClientID,
-		"name":            a.cfg.Name,
-		"hostname":        hostname,
-		"os":              info.OS,
-		"arch":            runtime.GOARCH,
-		"version":         Version,
-		"tags":            a.cfg.Tags,
-		"enrollmentToken": a.cfg.EnrollmentToken,
-		"agentToken":      a.cfg.AgentToken,
-		"jobs":            a.jobStates(),
+		"type":               "hello",
+		"protocolVersion":    1,
+		"clientId":           a.cfg.ClientID,
+		"name":               a.cfg.Name,
+		"hostname":           hostname,
+		"os":                 info.OS,
+		"arch":               runtime.GOARCH,
+		"version":            Version,
+		"tags":               a.cfg.Tags,
+		"enrollmentToken":    a.cfg.EnrollmentToken,
+		"agentToken":         a.cfg.AgentToken,
+		"machineId":          machineKey(),
+		"machineFingerprint": machineFingerprint(),
+		"jobs":               a.jobStates(),
 	})
 }
 
