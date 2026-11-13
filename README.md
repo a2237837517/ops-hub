@@ -69,6 +69,7 @@ GitHub topics are configured on the repository page. The project is designed to 
 - MCP server over **Streamable HTTP** (and legacy-compatible JSON-RPC behavior)
 - 15 MCP tools covering inventory, command execution, files, logs, and search
 - Web admin UI: clients, terminal, files, jobs, audit
+- Client list grouped by customer name (`config.json` → `name`), with per-machine status inside each group
 - Rename clients (Hub display name) and view OS/IP/CPU/memory/disk info
 - File browser with parent-directory navigation, left-side upload/download, drag-and-drop upload, and download-only handling for archives/binaries (`.gz`, `.zip`, images, etc.)
 - Delete files or directories from the UI (with confirmation); protected system roots are refused by the Agent

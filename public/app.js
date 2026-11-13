@@ -14,6 +14,7 @@
     filePath: '',
     selectedFile: null,
     tailCursor: null,
+    collapsedGroups: new Set(),
   };
 
   const $ = (id) => document.getElementById(id);
@@ -332,7 +333,7 @@
     const list = state.clients.filter((client) => {
       if (status && client.status !== status) return false;
       if (!query) return true;
-      return [client.id, client.name, client.hostname, client.os, ...(client.tags || [])]
+      return [client.id, client.name, client.group, client.hostname, client.os, ...(client.tags || [])]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query));
     });
@@ -340,16 +341,54 @@
       clientList.innerHTML = '<div class="muted" style="padding:12px">没有匹配的客户端</div>';
       return;
     }
-    clientList.innerHTML = list
-      .map(
-        (client) => `
+
+    // 按客户名分组：同一个安装包复制到多台机器时，name 相同，自然归到一组。
+    const groups = new Map();
+    for (const client of list) {
+      const key = client.group || client.name || client.hostname || client.id;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(client);
+    }
+
+    clientList.innerHTML = [...groups.entries()]
+      .sort(([a], [b]) => String(a).localeCompare(String(b), 'zh-CN'))
+      .map(([group, clients]) => {
+        const online = clients.filter((client) => client.status === 'online').length;
+        const collapsed = state.collapsedGroups.has(group);
+        const items = clients
+          .map((client) => {
+            const label =
+              client.displayName && client.displayName !== group
+                ? client.displayName
+                : client.hostname || client.id;
+            return `
         <div class="client-item ${state.selected?.id === client.id ? 'active' : ''}" data-id="${escapeHtml(client.id)}">
-          <div class="name"><span class="dot ${client.status}"></span>${escapeHtml(client.displayName || client.name || client.hostname || client.id)}</div>
+          <div class="name"><span class="dot ${client.status}"></span>${escapeHtml(label)}</div>
           <div class="meta">${client.primaryIp ? `IP ${escapeHtml(client.primaryIp)} · ` : ''}${escapeHtml(client.os || '')} ${escapeHtml(client.arch || '')} · ${escapeHtml(client.status)}</div>
-          <div class="meta">${escapeHtml(client.id)}</div>
-        </div>`,
-      )
+          <div class="meta client-id">${escapeHtml(client.id)}</div>
+        </div>`;
+          })
+          .join('');
+        return `
+        <div class="client-group ${collapsed ? 'collapsed' : ''}">
+          <button class="client-group-head" data-group="${escapeHtml(group)}">
+            <span class="group-arrow">${collapsed ? '▸' : '▾'}</span>
+            <span class="group-name">${escapeHtml(group)}</span>
+            <span class="group-count">${online}/${clients.length}</span>
+          </button>
+          <div class="client-group-body">${items}</div>
+        </div>`;
+      })
       .join('');
+
+    for (const head of clientList.querySelectorAll('.client-group-head')) {
+      head.addEventListener('click', () => {
+        const group = head.dataset.group;
+        if (state.collapsedGroups.has(group)) state.collapsedGroups.delete(group);
+        else state.collapsedGroups.add(group);
+        renderClients();
+      });
+    }
     for (const item of clientList.querySelectorAll('.client-item')) {
       item.addEventListener('click', () => selectClient(item.dataset.id));
     }

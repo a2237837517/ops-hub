@@ -25,6 +25,7 @@ function clientSummary(agent) {
   return {
     id: agent.id,
     name: agent.displayName || agent.name,
+    group: agent.name || agent.hostname || agent.id,
     hostname: agent.hostname,
     os: agent.os,
     arch: agent.arch,
@@ -153,12 +154,27 @@ function createMcpServer({ config, gateway, jobs, files, store, logger }) {
         tag: z.string().optional().describe('按标签过滤'),
         status: z.enum(['online', 'offline']).optional().describe('按在线状态过滤'),
         query: z.string().optional().describe('按名称/主机名/OS/标签模糊搜索'),
+        group: z.string().optional().describe('按客户名过滤（安装包 config.json 里的 name）'),
       },
     },
-    async ({ tag, status, query }) => {
+    async ({ tag, status, query, group }) => {
       try {
-        const list = store.listAgents({ tag, status, query }).map(clientSummary);
-        return textResult({ count: list.length, clients: list });
+        let list = store.listAgents({ tag, status, query });
+        if (group) {
+          list = list.filter((agent) => (agent.name || agent.hostname || agent.id) === group);
+        }
+        const clients = list.map(clientSummary);
+        const groups = [...clients.reduce((acc, client) => {
+          if (!acc.has(client.group)) {
+            acc.set(client.group, { name: client.group, total: 0, online: 0, clients: [] });
+          }
+          const item = acc.get(client.group);
+          item.total += 1;
+          if (client.status === 'online') item.online += 1;
+          item.clients.push({ id: client.id, hostname: client.hostname, status: client.status });
+          return acc;
+        }, new Map()).values()];
+        return textResult({ count: clients.length, groups, clients });
       } catch (error) {
         return errorResult(error);
       }

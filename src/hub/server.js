@@ -72,6 +72,8 @@ export async function startHub(config) {
       ...(includeInfo ? { info: info || {} } : {}),
       name: agent.displayName || agent.name,
       displayName: agent.displayName || '',
+      // 客户名：安装包 config.json 里的 name，重命名后仍然保留，用于分组。
+      group: agent.name || agent.hostname || agent.id,
       primaryIp: extractPrimaryIp(agent),
     };
   };
