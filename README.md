@@ -370,7 +370,7 @@ ops-agent.exe tunnel \
   --token <tunnelToken> \
   --client <clientId> \
   --forward 13306=127.0.0.1:3306 \
-  --forward 18080=192.168.11.30:80
+  --forward 18080=192.168.1.30:80
 ```
 
 Then connect locally:
