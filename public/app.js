@@ -1381,7 +1381,13 @@
     }, delay);
   }
 
-  function uploadFileToClient(file, targetPath, onProgress) {
+  const CHUNK_UPLOAD_THRESHOLD = 8 * 1024 * 1024;
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function uploadSingleFile(file, targetPath, onProgress) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open(
@@ -1407,6 +1413,99 @@
       xhr.onabort = () => reject(new Error('上传已取消'));
       xhr.send(file);
     });
+  }
+
+  function uploadChunk(blob, uploadId, offset, clientId, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open(
+        'POST',
+        apiUrl(
+          `api/clients/${encodeURIComponent(clientId)}/files/upload/chunk?uploadId=${encodeURIComponent(uploadId)}&offset=${offset}`,
+        ),
+      );
+      xhr.setRequestHeader('Authorization', `Bearer ${state.token}`);
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress?.(event.loaded);
+      };
+      xhr.onload = () => {
+        let data = {};
+        try {
+          data = JSON.parse(xhr.responseText || '{}');
+        } catch {
+          // ignore
+        }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(data);
+          return;
+        }
+        const error = new Error(data.message || `HTTP ${xhr.status}`);
+        if (xhr.status === 409 && typeof data.received === 'number') error.received = data.received;
+        reject(error);
+      };
+      xhr.onerror = () => reject(new Error('网络错误'));
+      xhr.onabort = () => reject(new Error('上传已取消'));
+      xhr.send(blob);
+    });
+  }
+
+  async function uploadChunkedFile(file, targetPath, onProgress) {
+    const clientId = state.selected.id;
+    const init = await api(`api/clients/${encodeURIComponent(clientId)}/files/upload/init`, {
+      method: 'POST',
+      body: JSON.stringify({ path: targetPath, size: file.size, overwrite: true }),
+    });
+    const uploadId = init.uploadId;
+    const chunkSize = init.chunkSize || CHUNK_UPLOAD_THRESHOLD;
+    let offset = 0;
+
+    while (offset < file.size) {
+      const end = Math.min(offset + chunkSize, file.size);
+      const blob = file.slice(offset, end);
+      let attempt = 0;
+      let progressed = false;
+      let lastError = null;
+
+      while (!progressed) {
+        try {
+          const result = await uploadChunk(blob, uploadId, offset, clientId, (loaded) => {
+            onProgress?.(Math.round(((offset + loaded) / file.size) * 100));
+          });
+          offset = Number.isFinite(result.received) ? result.received : end;
+          progressed = true;
+        } catch (error) {
+          // 服务端已经确认收到另一段位置（例如上一个分片响应丢了），直接从那里续传。
+          if (typeof error.received === 'number' && error.received !== offset) {
+            offset = error.received;
+            progressed = true;
+            break;
+          }
+          attempt += 1;
+          if (attempt >= 4) {
+            lastError = error;
+            break;
+          }
+          await sleep(1000 * attempt);
+        }
+      }
+      if (lastError) throw lastError;
+      onProgress?.(Math.round((offset / file.size) * 100));
+    }
+
+    onProgress?.(99);
+    const result = await api(`api/clients/${encodeURIComponent(clientId)}/files/upload/complete`, {
+      method: 'POST',
+      body: JSON.stringify({ uploadId, overwrite: true }),
+    });
+    onProgress?.(100);
+    return result;
+  }
+
+  function uploadFileToClient(file, targetPath, onProgress) {
+    if (file.size > CHUNK_UPLOAD_THRESHOLD) {
+      return uploadChunkedFile(file, targetPath, onProgress);
+    }
+    return uploadSingleFile(file, targetPath, onProgress);
   }
 
   async function handleUploadFiles(fileList) {

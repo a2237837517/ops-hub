@@ -65,7 +65,7 @@ GitHub topics are configured on the repository page. The project is designed to 
 
 - Agent WebSocket gateway with registration, per-agent tokens, heartbeat, and reconnect
 - Command jobs with on-disk spool, incremental output, byte offsets, timeout, cancel, and process-tree termination
-- Chunked file upload/download with SHA-256 and atomic writes
+- Chunked file upload/download with SHA-256 and atomic writes; browser uploads above 8MB are split into 8MB parts with retry and resume
 - MCP server over **Streamable HTTP** (and legacy-compatible JSON-RPC behavior)
 - 22 MCP tools covering inventory, command execution, files, logs, search, tunnels, and upgrades
 - Web admin UI: clients, terminal, files, jobs, audit
@@ -403,8 +403,10 @@ Click **升级** in the client header (or call `ops_agent_upgrade`) and the Agen
 4. the updater stops the service, replaces the binary (keeps `.bak`), and starts it again
 
 The Agent reconnects with the new `version`, which is shown in the client meta
-line. Upgrade requires the Agent to be online; a failed download or checksum
-leaves the running version untouched.
+line. Upgrade requires the Agent to be online and on **0.1.17 or newer** (older
+builds do not understand `agent.upgrade`; the Hub returns a clear error and you
+install once manually). A failed download or checksum leaves the running version
+untouched.
 
 ---
 

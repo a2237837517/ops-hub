@@ -57,10 +57,38 @@ export function upgradeTarget(config, agent) {
   };
 }
 
+// 支持 agent.upgrade 的第一个版本。更早的 Agent 收到该消息只会记为“未知消息”。
+const MIN_UPGRADE_VERSION = '0.1.17';
+
+function parseVersion(value) {
+  return String(value || '')
+    .split('.')
+    .map((part) => Number.parseInt(part, 10) || 0);
+}
+
+export function compareVersion(a, b) {
+  const left = parseVersion(a);
+  const right = parseVersion(b);
+  for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
+    const diff = (left[i] || 0) - (right[i] || 0);
+    if (diff !== 0) return diff > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
 export function requestUpgrade({ config, store, gateway, clientId, logger }) {
   const agent = store.findAgent(clientId);
   if (!agent) return { error: 'client not found' };
   if (!gateway.getConnection(agent.id)) return { error: 'client is offline' };
+  if (compareVersion(agent.version, MIN_UPGRADE_VERSION) < 0) {
+    return {
+      error:
+        `agent ${agent.version || 'unknown'} cannot upgrade remotely; ` +
+        `install ${MIN_UPGRADE_VERSION} or newer manually, then remote upgrades work`,
+      needsManualUpgrade: true,
+      downloadUrl: downloadUrl(config, 'ops-agent-windows-amd64.zip'),
+    };
+  }
 
   const target = upgradeTarget(config, agent);
   if (target.error) return target;

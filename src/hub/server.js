@@ -8,6 +8,7 @@ import { JobManager } from './job-manager.js';
 import { FileManager } from './file-manager.js';
 import { TunnelGateway } from './tunnel-gateway.js';
 import { loadManifest, requestUpgrade } from './upgrade.js';
+import { appendChunk, cleanupStaleUploads, completeUpload, createUpload } from './resumable-upload.js';
 import { Store } from '../store.js';
 import { createMcpRouter } from '../mcp/server.js';
 import { cleanupAgentPackages, privatePackageFile } from './agent-package.js';
@@ -30,7 +31,7 @@ export async function startHub(config) {
   const jsonParser = express.json({ limit: '8mb' });
   app.use((req, res, next) => {
     // 文件上传走原始流，不能先被 JSON parser 消费（.json 文件会被浏览器标成 application/json）
-    if (req.method === 'POST' && /\/files\/upload\/?$/.test(req.path)) return next();
+    if (req.method === 'POST' && /\/files\/upload(\/chunk)?\/?$/.test(req.path)) return next();
     return jsonParser(req, res, next);
   });
 
@@ -451,6 +452,63 @@ export async function startHub(config) {
     }
   }));
 
+  app.post('/api/clients/:id/files/upload/init', asyncHandler(async (req, res) => {
+    const agent = store.findAgent(req.params.id);
+    if (!agent) return res.status(404).json({ success: false, message: 'client not found' });
+    try {
+      const result = createUpload({
+        config,
+        clientId: agent.id,
+        remotePath: String(req.body?.path || ''),
+        size: req.body?.size,
+      });
+      res.json({ success: true, ...result });
+    } catch (error) {
+      res.status(error.status || 400).json({ success: false, message: error.message });
+    }
+  }));
+
+  app.post('/api/clients/:id/files/upload/chunk', asyncHandler(async (req, res) => {
+    const agent = store.findAgent(req.params.id);
+    if (!agent) return res.status(404).json({ success: false, message: 'client not found' });
+    const uploadId = String(req.query.uploadId || '');
+    const offset = Number(req.query.offset || 0);
+    try {
+      const result = await appendChunk({
+        config,
+        clientId: agent.id,
+        uploadId,
+        offset,
+        stream: req,
+      });
+      res.json({ success: true, ...result });
+    } catch (error) {
+      if (req.destroyed || res.destroyed) return;
+      const body = { success: false, message: error.message };
+      if (error.received !== undefined) body.received = error.received;
+      res.status(error.status || 500).json(body);
+    }
+  }));
+
+  app.post('/api/clients/:id/files/upload/complete', asyncHandler(async (req, res) => {
+    const agent = store.findAgent(req.params.id);
+    if (!agent) return res.status(404).json({ success: false, message: 'client not found' });
+    try {
+      const result = await completeUpload({
+        config,
+        files,
+        clientId: agent.id,
+        uploadId: String(req.body?.uploadId || ''),
+        overwrite: req.body?.overwrite !== false,
+      });
+      res.json({ success: true, ...result });
+    } catch (error) {
+      const body = { success: false, message: error.message };
+      if (error.received !== undefined) body.received = error.received;
+      res.status(error.status || 500).json(body);
+    }
+  }));
+
   app.get('/api/clients/:id/files/download', asyncHandler(async (req, res) => {
     const agent = store.findAgent(req.params.id);
     if (!agent) return res.status(404).json({ success: false, message: 'client not found' });
@@ -510,6 +568,23 @@ export async function startHub(config) {
   }, 6 * 60 * 60 * 1000);
   pruneTimer.unref?.();
 
+  try {
+    const removed = cleanupStaleUploads(config);
+    if (removed) logger.info(`清理过期上传分片 ${removed} 个`);
+  } catch (error) {
+    logger.warn('清理过期上传分片失败', error.message);
+  }
+
+  const uploadCleanupTimer = setInterval(() => {
+    try {
+      const removed = cleanupStaleUploads(config);
+      if (removed) logger.info(`清理过期上传分片 ${removed} 个`);
+    } catch (error) {
+      logger.warn('清理过期上传分片失败', error.message);
+    }
+  }, 60 * 60 * 1000);
+  uploadCleanupTimer.unref?.();
+
   const packageCleanupTimer = setInterval(() => {
     try { cleanupAgentPackages(config); } catch (error) { logger.warn('清理旧客户端安装包失败', error.message); }
   }, 60 * 60 * 1000);
@@ -521,6 +596,7 @@ export async function startHub(config) {
     closed = true;
     clearInterval(pruneTimer);
     clearInterval(packageCleanupTimer);
+    clearInterval(uploadCleanupTimer);
     logger.info('shutting down...');
     tunnels.close();
     gateway.close();
