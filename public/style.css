@@ -65,6 +65,22 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .top-actions { display: flex; align-items: center; gap: 10px; }
 
 .layout { flex: 1; display: flex; min-height: 0; }
+
+/* 顶部导航 */
+.top-nav { display: flex; gap: 4px; margin-left: 24px; }
+.nav-tab {
+  padding: 6px 14px; border-radius: 8px; font-size: 13px;
+  border: 1px solid transparent; background: transparent;
+  color: var(--muted); cursor: pointer; transition: all .15s;
+}
+.nav-tab:hover { color: var(--text); background: rgba(255,255,255,.05); }
+.nav-tab.active {
+  color: var(--accent); background: rgba(74,158,255,.14);
+  border-color: rgba(74,158,255,.35); font-weight: 500;
+}
+.topbar { display: flex; align-items: center; }
+.top-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
 .sidebar {
   width: 300px; flex: 0 0 300px;
   border-right: 1px solid var(--border);
@@ -710,13 +726,186 @@ td.command { max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
 .socks5-clients { margin-bottom: 12px; }
 .socks5-clients h4 { margin: 0 0 6px; font-size: 13px; }
 .socks5-client-list {
-  max-height: 120px; overflow: auto; font-size: 12px;
+  max-height: 180px; overflow: auto; font-size: 12px;
   border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px;
 }
 .socks5-client {
-  display: flex; justify-content: space-between; gap: 10px;
+  display: flex; align-items: center; gap: 8px;
   padding: 6px 0; border-bottom: 1px solid var(--border); cursor: pointer;
 }
 .socks5-client:last-child { border-bottom: none; }
 .socks5-client:hover { color: var(--text); }
 .socks5-client.active { color: var(--accent); }
+.socks5-client-name { flex: 0 0 auto; }
+.socks5-client-id { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.socks5-proxy-toggle {
+  flex: 0 0 auto; font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer;
+}
+.socks5-proxy-toggle.on { border-color: #2e9e5b; color: #2e9e5b; background: rgba(46,158,91,.12); }
+.socks5-proxy-toggle.off { border-color: #b0483f; color: #b0483f; background: rgba(176,72,63,.12); }
+.socks5-proxy-toggle:disabled { opacity: .5; cursor: default; }
+
+/* ===== 代理总览 ===== */
+.proxy-head-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.proxy-summary {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px; margin: 16px 0;
+}
+.proxy-summary-item {
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.proxy-summary-label { font-size: 11px; color: var(--muted); }
+.proxy-summary-value { font-size: 16px; font-weight: 600; }
+.proxy-table-wrap { max-height: none; }
+/* 代理表列宽：客户端 26% / IP 16% / 开关 14% / 连接 8% / 配置 36% */
+.proxy-table { table-layout: fixed; width: 100%; }
+.proxy-table td, .proxy-table th { white-space: normal; }
+.proxy-table td:nth-child(1), .proxy-table th:nth-child(1) { width: 26%; }
+.proxy-table td:nth-child(2), .proxy-table th:nth-child(2) { width: 16%; }
+.proxy-table td:nth-child(3), .proxy-table th:nth-child(3) { width: 14%; }
+.proxy-table td:nth-child(4), .proxy-table th:nth-child(4) { width: 8%; }
+.proxy-table td:nth-child(5), .proxy-table th:nth-child(5) { width: 36%; }
+.proxy-table td:nth-child(5) { display: table-cell; }
+.proxy-table td:nth-child(5) .ghost { margin: 2px 4px 2px 0; }
+
+.proxy-table { table-layout: fixed; width: 100%; }
+.proxy-table td { vertical-align: middle; }
+.proxy-table td:nth-child(1) { white-space: normal; }
+.proxy-name { font-weight: 500; }
+.proxy-stream-badge {
+  display: inline-block; min-width: 26px; text-align: center;
+  padding: 2px 8px; border-radius: 999px; font-size: 12px;
+  border: 1px solid var(--border); color: var(--muted);
+}
+.proxy-stream-badge.active {
+  border-color: #2e9e5b; color: #2e9e5b; background: rgba(46,158,91,.12);
+}
+.proxy-legend { margin-top: 12px; line-height: 1.7; }
+
+/* 服务状态条 */
+.proxy-service-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap;
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 16px; margin-bottom: 14px;
+}
+.proxy-service-info { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.proxy-service-endpoint { display: flex; flex-direction: column; gap: 2px; }
+.proxy-service-actions { display: flex; gap: 8px; }
+.proxy-summary-bulk { align-items: flex-start; }
+.proxy-bulk-btns { display: flex; gap: 6px; }
+.proxy-modes { margin-top: 18px; }
+.proxy-pick { margin: 10px 0; }
+.proxy-pick label { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.proxy-pick select {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 10px; color: var(--text); font-size: 12px; min-width: 200px;
+}
+
+/* ===== 代理弹窗 ===== */
+.proxy-status-panel {
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; margin-bottom: 14px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.proxy-status-row {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 13px; gap: 10px;
+}
+.proxy-status-label { color: var(--muted); }
+.proxy-status-value { font-weight: 500; }
+.proxy-status-actions { justify-content: flex-start; gap: 8px; margin-top: 4px; }
+
+.tunnel-section { margin-bottom: 14px; }
+.tunnel-section-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  font-size: 12px; font-weight: 600; margin-bottom: 6px;
+}
+.tunnel-client-list {
+  max-height: 170px; overflow: auto;
+  border: 1px solid var(--border); border-radius: 8px; padding: 2px 10px;
+  font-size: 12px;
+}
+.tunnel-client-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 0; border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.tunnel-client-row:last-child { border-bottom: none; }
+.tunnel-client-row:hover { color: var(--text); }
+.tunnel-client-row.active { color: var(--accent); }
+.tunnel-client-name { flex: 0 0 auto; font-weight: 500; }
+.tunnel-cred-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tunnel-cred-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.tunnel-cred-grid input {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 8px; color: var(--text); font-size: 12px; font-family: monospace;
+}
+.tunnel-mode-toggle { display: flex; gap: 8px; margin: 14px 0 10px; }
+.tunnel-tab {
+  flex: 1; padding: 7px 10px; border-radius: 8px; font-size: 12px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--muted); cursor: pointer;
+}
+.tunnel-tab.active { border-color: var(--accent); color: var(--accent); background: rgba(74,158,255,.12); }
+
+/* 表格内的开关：做成明显的可点击按钮 */
+.proxy-switch {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 500;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--muted); cursor: pointer; transition: all .15s ease;
+  min-width: 84px; justify-content: center;
+}
+.proxy-switch:hover { border-color: var(--accent); color: var(--accent); }
+.proxy-switch .knob {
+  width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: 0 0 auto;
+}
+.proxy-switch.on {
+  border-color: #2e9e5b; color: #2e9e5b; background: rgba(46,158,91,.14);
+}
+.proxy-switch.on:hover { background: rgba(46,158,91,.24); }
+.proxy-switch.off {
+  border-color: #b0483f; color: #b0483f; background: rgba(176,72,63,.14);
+}
+.proxy-switch.off:hover { background: rgba(176,72,63,.24); }
+.proxy-switch:disabled { opacity: .55; cursor: default; }
+
+/* 三种模式区块 */
+.proxy-mode-block {
+  margin-top: 26px; padding: 16px 18px;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: rgba(255,255,255,.015);
+}
+.proxy-mode-block:first-of-type { margin-top: 18px; }
+.proxy-mode-head { margin-bottom: 12px; }
+.proxy-mode-head h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+.proxy-mode-head .small-text { display: block; line-height: 1.65; }
+
+/* 活跃连接明细 */
+.proxy-conn-block { margin-top: 22px; }
+.proxy-conn-block .proxy-mode-head { display: flex; align-items: baseline; gap: 10px; }
+.proxy-conn-block .proxy-mode-head button { margin-left: auto; }
+
+/* 模式头部批量按钮 */
+.proxy-mode-head {
+  display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap;
+}
+.proxy-mode-head > span:not(.proxy-mode-bulk) { flex: 1 1 auto; }
+.proxy-mode-bulk { margin-left: auto; display: flex; gap: 6px; flex: 0 0 auto; }
+
+/* 端口转发规则标签 */
+.fwd-cell { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.fwd-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 2px 6px 2px 10px; font-size: 12px;
+  background: rgba(74,158,255,.08);
+}
+.fwd-chip code { font-size: 11px; color: var(--accent); }
+.fwd-remove {
+  border: none; background: transparent; color: var(--muted);
+  cursor: pointer; font-size: 14px; line-height: 1; padding: 0 4px;
+}
+.fwd-remove:hover { color: #b0483f; }

@@ -29,12 +29,18 @@ const DEFAULTS = {
     publicHost: '',
     maxStreamsPerClient: 16,
     idleTimeoutSec: 1800,
+    // 允许作为代理出口的客户端白名单。
+    // 不设置（undefined）= 全部允许；设为数组 = 只放行列出的 clientId。
+    // 由面板逐个开关，保存在 data/settings.json。
   },
   tunnel: {
     // 默认关闭：tunnelToken 一旦泄露等于内网入口泄露，必须由管理员显式开启并设置随机 token。
     enabled: false,
     token: '',
     allowedCidrs: ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'],
+    // 按用途分开的白名单：undefined = 全部允许，数组 = 只允许列出的 clientId
+    encryptedClients: undefined,
+    forwardClients: undefined,
     allowedPorts: [],
     maxStreamsPerTunnel: 16,
     idleTimeoutSec: 1800,

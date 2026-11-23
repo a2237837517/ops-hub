@@ -101,6 +101,8 @@ export class TunnelGateway {
     this.logger = logger;
     this.agentGateway = agentGateway;
     this.tunnels = new Map();
+    // 被管理员手动断开后的客户端，短时间拒绝重连，避免 agent 立刻连回来
+    this.blocked = new Map();
     this.streamsByGlobalId = new Map();
     this.nextStreamId = 1;
 
@@ -169,6 +171,42 @@ export class TunnelGateway {
       ws.close(4004, 'agent offline');
       return;
     }
+
+    // 按用途区分白名单：
+    //   kind=encrypted → 模式② 本地加密 SOCKS5
+    //   kind=forward   → 模式③ 端口转发
+    // 未带 kind 的老客户端回落到 tunnel.allowedClients（兼容）
+    const kind = String(url.searchParams.get('kind') || '').trim();
+    const socksCfg = this.config.socks5 || {};
+    const tunnelCfg = this.config.tunnel || {};
+    let allowed;
+    if (kind === 'encrypted') {
+      allowed = tunnelCfg.encryptedClients;
+    } else if (kind === 'forward') {
+      allowed = tunnelCfg.forwardClients;
+    } else {
+      allowed = tunnelCfg.allowedClients;
+    }
+    if (Array.isArray(allowed) && !allowed.includes(clientId)) {
+      this.store.audit('tunnel.denied', {
+        clientId,
+        kind: kind || 'legacy',
+        reason: 'client disabled for this mode',
+        remoteAddress: req.socket.remoteAddress,
+      });
+      ws.close(4003, 'client disabled for this mode');
+      return;
+    }
+
+    // 管理员刚断开过的客户端，短时间内拒绝重连
+    const blockedUntil = this.blocked.get(clientId);
+    if (blockedUntil && blockedUntil > Date.now()) {
+      const left = Math.ceil((blockedUntil - Date.now()) / 1000);
+      this.logger.info(`tunnel rejected (blocked ${left}s): ${clientId}`);
+      ws.close(4029, `blocked for ${left}s`);
+      return;
+    }
+    if (blockedUntil) this.blocked.delete(clientId);
 
     const forwarded = String(req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || '')
       .split(',')[0]
@@ -528,9 +566,12 @@ export class TunnelGateway {
     }));
   }
 
-  close(id) {
+  close(id, blockSeconds = 0) {
     const tunnel = this.tunnels.get(id);
     if (!tunnel) return false;
+    if (blockSeconds > 0) {
+      this.blocked.set(tunnel.clientId, Date.now() + blockSeconds * 1000);
+    }
     try {
       tunnel.ws.close(4005, 'closed by admin');
     } catch {

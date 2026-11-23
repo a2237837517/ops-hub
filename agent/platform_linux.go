@@ -128,6 +128,15 @@ rm -f "$0"
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		return err
 	}
+	// systemd 默认 KillMode=control-group，setsid 仍然在同一个 cgroup 里，
+	// 停服务时会把升级脚本一起杀掉。优先用 systemd-run 起独立 transient unit。
+	if _, err := exec.LookPath("systemd-run"); err == nil {
+		unit := fmt.Sprintf("ops-agent-updater-%d", os.Getpid())
+		cmd := exec.Command("systemd-run", "--unit="+unit, "--collect", "/bin/sh", path)
+		if err := cmd.Start(); err == nil {
+			return nil
+		}
+	}
 	cmd := exec.Command("/bin/sh", path)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	return cmd.Start()

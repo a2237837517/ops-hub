@@ -132,16 +132,6 @@
   });
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
-    if (!$('socks5-backdrop').classList.contains('hidden')) {
-      event.preventDefault();
-      $('socks5-backdrop').classList.add('hidden');
-      return;
-    }
-    if (!$('tunnel-backdrop').classList.contains('hidden')) {
-      event.preventDefault();
-      hideTunnel();
-      return;
-    }
     if ($('dialog-backdrop').classList.contains('hidden')) return;
     event.preventDefault();
     closeDialog(null);
@@ -178,115 +168,31 @@
     }
   }
 
-  function setTunnelMode(mode) {
-    state.tunnelMode = mode === 'socks5' ? 'socks5' : 'forward';
-    const socks = state.tunnelMode === 'socks5';
-    $('tunnel-form').classList.toggle('socks5', socks);
-    $('tunnel-user-select-wrap').classList.toggle('hidden', !socks);
-    $('tunnel-desc').textContent = socks
-      ? '在本地开一个 SOCKS5 端口，通过当前客户端访问任意 TCP 目标。走现有 443，不开新端口；Clash 填 127.0.0.1:端口。勾选“用户名选择 Agent”后，用户名填 clientId，密码填命令里的 token。'
-      : '在本地 127.0.0.1 开一个端口，通过当前客户端访问一个固定目标 TCP 端口。';
-    $('tunnel-local').value = socks ? '1080' : '13306';
-    for (const radio of document.querySelectorAll('input[name="tunnel-mode"]')) {
-      radio.checked = radio.value === state.tunnelMode;
+  function setActiveNav(view) {
+    for (const tab of document.querySelectorAll('.nav-tab')) {
+      tab.classList.toggle('active', tab.dataset.view === view);
     }
   }
 
-  function showTunnel() {
-    if (!state.selected) return;
-    $('tunnel-backdrop').classList.remove('hidden');
-    setTunnelMode(state.tunnelMode || 'forward');
-    $('tunnel-command').classList.add('hidden');
-    $('tunnel-actions').classList.add('hidden');
-    $('tunnel-copy').textContent = '复制命令';
-    $('tunnel-list').textContent = '加载中...';
-    loadTunnels().catch((error) => {
-      $('tunnel-list').textContent = `加载失败: ${error.message}`;
-    });
-  }
-
-  function hideTunnel() {
-    $('tunnel-backdrop').classList.add('hidden');
-  }
-
-  async function generateTunnelCommand() {
-    if (!state.selected) return;
-    const local = Number($('tunnel-local').value);
-    const host = $('tunnel-host').value.trim();
-    const port = Number($('tunnel-port').value);
-    const socks = state.tunnelMode === 'socks5';
-    if (!local || (!socks && (!host || !port))) {
-      alert(socks ? '请填写本地端口' : '请填写本地端口、目标地址和目标端口');
-      return;
-    }
-    try {
-      const body = socks
-        ? { socks5: { port: local, userSelect: $('tunnel-user-select').checked } }
-        : { forwards: [{ local, host, port }] };
-      const data = await api(`/api/clients/${encodeURIComponent(state.selected.id)}/tunnel-command`, {
-        method: 'POST',
-        body: JSON.stringify(body),
-      });
-      $('tunnel-command').textContent = data.command;
-      $('tunnel-command').classList.remove('hidden');
-      $('tunnel-actions').classList.remove('hidden');
-    } catch (error) {
-      alert(`生成失败: ${error.message}`);
+  // 统一视图切换：任何时刻只允许一个主视图可见
+  function switchView(target) {
+    const VIEWS = ['empty', 'client-view', 'downloads-view', 'revoked-view', 'proxy-view'];
+    for (const id of VIEWS) {
+      const el = $(id);
+      if (!el) continue;
+      if (id === target) el.classList.remove('hidden');
+      else el.classList.add('hidden');
     }
   }
 
-  async function copyTunnelCommand() {
-    const text = $('tunnel-command').textContent || '';
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      $('tunnel-copy').textContent = '已复制';
-      setTimeout(() => {
-        $('tunnel-copy').textContent = '复制命令';
-      }, 1500);
-    } catch {
-      alert('复制失败，请手动选中命令复制');
-    }
-  }
-
-  async function loadTunnels() {
-    if (!state.selected) return;
-    const data = await api(`/api/tunnels?clientId=${encodeURIComponent(state.selected.id)}`);
-    const list = data.tunnels || [];
-    if (!list.length) {
-      $('tunnel-list').textContent = '暂无';
-      return;
-    }
-    $('tunnel-list').innerHTML = list
-      .map((tunnel) => {
-        const targets = (tunnel.streams || [])
-          .map((stream) => `${stream.target}（本地 ${stream.localPort || '-'}）`)
-          .join('，');
-        return `
-        <div class="tunnel-item">
-          <span>${escapeHtml(targets || '无活动连接')}<br /><span class="muted">${escapeHtml(tunnel.remoteAddress || '')} · ${escapeHtml(tunnel.createdAt || '')}</span></span>
-          <button class="ghost" data-close-tunnel="${escapeHtml(tunnel.id)}">关闭</button>
-        </div>`;
-      })
-      .join('');
-    for (const button of $('tunnel-list').querySelectorAll('[data-close-tunnel]')) {
-      button.addEventListener('click', async () => {
-        try {
-          await api(`/api/tunnels/${encodeURIComponent(button.dataset.closeTunnel)}/close`, { method: 'POST' });
-          await loadTunnels();
-        } catch (error) {
-          alert(`关闭失败: ${error.message}`);
-        }
-      });
-    }
+  function hideAllViews() {
+    switchView(null);
   }
 
   function showDownloads() {
     state.view = 'downloads';
-    $('empty').classList.add('hidden');
-    $('client-view').classList.add('hidden');
-    $('revoked-view').classList.add('hidden');
-    $('downloads-view').classList.remove('hidden');
+    setActiveNav('downloads');
+    switchView('downloads-view');
     loadDownloads().catch((error) => {
       $('download-list').textContent = `加载失败: ${error.message}`;
     });
@@ -294,15 +200,8 @@
 
   function showClientOrEmpty() {
     state.view = state.selected ? 'client' : 'clients';
-    $('downloads-view').classList.add('hidden');
-    $('revoked-view').classList.add('hidden');
-    if (state.selected) {
-      $('client-view').classList.remove('hidden');
-      $('empty').classList.add('hidden');
-    } else {
-      $('client-view').classList.add('hidden');
-      $('empty').classList.remove('hidden');
-    }
+    setActiveNav('clients');
+    switchView(state.selected ? 'client-view' : 'empty');
   }
 
   async function loadRevoked() {
@@ -330,16 +229,443 @@
 
   async function showRevoked() {
     state.view = 'revoked';
-    $('empty').classList.add('hidden');
-    $('client-view').classList.add('hidden');
-    $('downloads-view').classList.add('hidden');
-    $('revoked-view').classList.remove('hidden');
+    setActiveNav('revoked');
+    switchView('revoked-view');
     try {
       await loadRevoked();
     } catch (error) {
       $('revoked-body').innerHTML = `<tr><td colspan="3" class="error">加载失败: ${escapeHtml(error.message)}</td></tr>`;
     }
   }
+
+  // ===== 代理管理：三种模式各一张表 =====
+
+  function buildClashYaml(client, info, mode) {
+    const host = info.publicHost || info.host || '118.31.73.50';
+    const port = info.port || 10010;
+    const pass = info.token || '';
+    const name = client.name || client.id;
+
+    if (mode === 'central') {
+      // 模式①：连公网端口
+      return `  - { name: '${name}', type: socks5, server: ${host}, port: ${port}, skip-cert-verify: true, password: ${pass}, username: ${client.id} }`;
+    }
+    // 模式②：连本地加密端口
+    return `  - { name: '${name}(加密)', type: socks5, server: 127.0.0.1, port: 1080, skip-cert-verify: true, username: ${client.id} }`;
+  }
+
+  function renderProxyRows(tbodyId, clients, info, mode) {
+    const body = $(tbodyId);
+    if (!body) return;
+    if (!clients.length) {
+      body.innerHTML = '<tr><td colspan="5" class="muted">没有在线客户端</td></tr>';
+      return;
+    }
+    // 模式③需要显示已保存的转发规则
+    const forwards = mode === 'forward' ? (state.forwards || []) : [];
+
+    body.innerHTML = clients
+      .slice()
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh-CN'))
+      .map((c) => {
+        const streams = Number(c.activeStreams || 0);
+        const enabled = Boolean(c.modes && c.modes[mode]);
+
+        // 模式③：这一行显示该客户端的转发规则
+        if (mode === 'forward') {
+          const mine = forwards.filter((f) => f.clientId === c.id);
+          const rules = mine.length
+            ? mine
+                .map(
+                  (f) => `<span class="fwd-chip">
+                    <code>${f.localPort}</code> → <code>${f.targetPort}</code>
+                    <button class="fwd-remove" data-fwd-remove="${escapeHtml(f.id)}" title="删除这条规则">×</button>
+                  </span>`,
+                )
+                .join('')
+            : '<span class="muted small-text">未配置</span>';
+          return `
+        <tr>
+          <td>
+            <div class="proxy-name">${escapeHtml(c.name || c.id)}</div>
+            <div class="muted small-text">${escapeHtml(c.id)}</div>
+          </td>
+          <td class="muted">${escapeHtml(c.remoteAddress || '-')}</td>
+          <td>
+            <button class="proxy-switch ${enabled ? 'on' : 'off'}"
+                    data-toggle="${escapeHtml(c.id)}" data-mode="${mode}"
+                    data-enabled="${enabled ? '1' : '0'}">
+              <span class="knob"></span>${enabled ? '已开启' : '已关闭'}
+            </button>
+          </td>
+          <td>${streams > 0 ? `<span class="proxy-stream-badge active">${streams}</span>` : '<span class="proxy-stream-badge">0</span>'}</td>
+          <td class="fwd-cell">
+            ${rules}
+            <button class="ghost" data-copy="${escapeHtml(c.id)}" data-mode="${mode}"
+                    ${enabled ? '' : 'disabled title="先打开代理"'}>+ 添加</button>
+            <button class="ghost" data-goto="${escapeHtml(c.id)}" title="打开该客户端管理页">管理</button>
+          </td>
+        </tr>`;
+        }
+
+        return `
+        <tr>
+          <td>
+            <div class="proxy-name">${escapeHtml(c.name || c.id)}</div>
+            <div class="muted small-text">${escapeHtml(c.id)}</div>
+          </td>
+          <td class="muted">${escapeHtml(c.remoteAddress || '-')}</td>
+          <td>
+            <button class="proxy-switch ${enabled ? 'on' : 'off'}"
+                    data-toggle="${escapeHtml(c.id)}" data-mode="${mode}"
+                    data-enabled="${enabled ? '1' : '0'}"
+                    title="${enabled ? '点击关闭' : '点击开启'}">
+              <span class="knob"></span>${enabled ? '已开启' : '已关闭'}
+            </button>
+          </td>
+          <td>${streams > 0 ? `<span class="proxy-stream-badge active">${streams}</span>` : '<span class="proxy-stream-badge">0</span>'}</td>
+          <td class="fwd-cell">
+            <button class="ghost" data-copy="${escapeHtml(c.id)}" data-mode="${mode}"
+                    ${enabled ? '' : 'disabled title="先打开代理"'}>复制配置</button>
+            <button class="ghost" data-goto="${escapeHtml(c.id)}" title="打开该客户端管理页">管理</button>
+          </td>
+        </tr>`;
+      })
+      .join('');
+
+    // 跳转到该客户端管理页
+    for (const btn of body.querySelectorAll('[data-goto]')) {
+      btn.addEventListener('click', () => {
+        const client = state.clients.find((item) => item.id === btn.dataset.goto);
+        if (!client) {
+          alert('客户端不在当前列表，请刷新后重试');
+          return;
+        }
+        state.selected = client;
+        renderClients();
+        showClientOrEmpty();
+      });
+    }
+
+    // 删除转发规则
+    for (const btn of body.querySelectorAll('[data-fwd-remove]')) {
+      btn.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        btn.disabled = true;
+        try {
+          await api(`/api/forwards/${encodeURIComponent(btn.dataset.fwdRemove)}`, { method: 'DELETE' });
+          await loadProxyOverview();
+        } catch (error) {
+          btn.disabled = false;
+          alert(`删除失败: ${error.message}`);
+        }
+      });
+    }
+
+    for (const btn of body.querySelectorAll('[data-toggle]')) {
+      btn.addEventListener('click', async () => {
+        const clientId = btn.dataset.toggle;
+        const m = btn.dataset.mode;
+        const next = btn.dataset.enabled !== '1';
+        btn.disabled = true;
+        try {
+          await api(`/api/socks5/modes/${m}/clients/${encodeURIComponent(clientId)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: next }),
+          });
+          await loadProxyOverview();
+        } catch (error) {
+          btn.disabled = false;
+          alert(`切换失败: ${error.message}`);
+        }
+      });
+    }
+
+    for (const btn of body.querySelectorAll('[data-copy]')) {
+      btn.addEventListener('click', async () => {
+        const cid = btn.dataset.copy;
+        const m = btn.dataset.mode;
+        const client = clients.find((c) => c.id === cid);
+        if (!client) return;
+
+        if (m === 'forward') {
+          // 模式3：填目标端口 -> 保存到配置 -> 表格显示 -> 可删除
+          const answer = await openDialog({
+            title: '添加端口转发',
+            message: `客户端：${client.name || client.id}\n\n填写要访问的目标端口（MySQL 3306 / Web 7002 等）。\n本地会自动分配一个端口。`,
+            input: '3306',
+            confirmText: '添加',
+            icon: '🔀',
+          });
+          if (!answer) return;
+          const targetPort = Number(String(answer).trim());
+          if (!Number.isInteger(targetPort) || targetPort <= 0 || targetPort > 65535) {
+            alert('端口无效，请输入 1-65535 的数字');
+            return;
+          }
+          const localPort = targetPort > 10000 ? targetPort + 1 : 10000 + targetPort;
+          try {
+            // 保存配置，让表格能显示出来
+            await api('/api/forwards', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ clientId: cid, targetPort, localPort, clientName: client.name }),
+            });
+            const data = await api(`/api/clients/${encodeURIComponent(cid)}/tunnel-command`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ forwards: [{ local: localPort, host: '127.0.0.1', port: targetPort }] }),
+            });
+            const text = [
+              `# 客户端：${client.name || client.id}`,
+              `# 目标端口：${targetPort}  →  本地端口：${localPort}`,
+              `# 运行后在你自己电脑访问 127.0.0.1:${localPort}`,
+              '',
+              data.command,
+            ].join('\n');
+            await copyText(text);
+            await loadProxyOverview();
+            btn.textContent = '已复制命令行';
+            setTimeout(() => { btn.textContent = '填端口生成'; }, 2500);
+          } catch (error) {
+            alert(`失败: ${error.message}`);
+          }
+          return;
+        }
+
+        if (m === 'encrypted') {
+          try {
+            const data = await api(`/api/clients/${encodeURIComponent(cid)}/tunnel-command`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ socks5: { port: 1080, userSelect: false } }),
+            });
+            const yaml = buildClashYaml(client, info, 'encrypted');
+            const full = `# 1) 先在你的电脑运行这条命令：\n# ${data.command}\n#\n# 2) 然后 Clash 加这个节点：\n${yaml}`;
+            await copyText(full);
+            btn.textContent = '已复制(含命令)';
+          } catch (error) {
+            alert(`生成失败: ${error.message}`);
+            return;
+          }
+          setTimeout(() => { btn.textContent = '复制配置'; }, 2000);
+          return;
+        }
+
+        // 模式1
+        await copyText(buildClashYaml(client, info, 'central'));
+        btn.textContent = '已复制';
+        setTimeout(() => { btn.textContent = '复制配置'; }, 1500);
+      });
+    }
+  }
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      alert('复制失败，请手动复制：\n\n' + text);
+      return false;
+    }
+  }
+
+  // 一次复制该模式下所有已开启客户端的配置
+  async function copyAllYaml(mode) {
+    const info = state.socks5 || {};
+    const clients = (info.clients || []).filter((c) => c.modes && c.modes[mode]);
+    if (!clients.length) {
+      alert('该模式下没有已开启的客户端');
+      return;
+    }
+    const lines = clients
+      .slice()
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh-CN'))
+      .map((c) => buildClashYaml(c, info, mode));
+    const header = mode === 'encrypted'
+      ? '# 模式②：需先在每台客户端对应的电脑上运行 tunnel 命令，再使用下列节点\n'
+      : '# 模式①：公网直连，直接用\n';
+    const ok = await copyText(header + lines.join('\n'));
+    if (ok) {
+      const btn = document.querySelector(`[data-copy-all="${mode}"]`);
+      if (btn) {
+        const prev = btn.textContent;
+        btn.textContent = `已复制 ${clients.length} 条`;
+        setTimeout(() => { btn.textContent = prev; }, 2000);
+      }
+    }
+  }
+
+  async function loadProxyOverview() {
+    const data = await api('/api/socks5');
+    const info = data.socks5 || {};
+    state.socks5 = info;
+
+    // 端口转发规则（模式③）
+    try {
+      const fw = await api('/api/forwards');
+      state.forwards = fw.forwards || [];
+    } catch {
+      state.forwards = [];
+    }
+
+    const enabled = Boolean(info.enabled);
+    const host = info.publicHost || info.host || '-';
+    const port = info.port || '-';
+
+    $('proxy-endpoint').textContent = enabled ? `${host}:${port}` : '未监听';
+    const stateEl = $('proxy-state');
+    stateEl.textContent = enabled ? '运行中' : '已停止';
+    stateEl.className = `badge ${enabled ? 'online' : ''}`;
+    $('mode1-endpoint').textContent = enabled ? `${host}:${port}` : `${host}:${port}（未启动）`;
+
+    const svcBtn = $('proxy-svc-toggle');
+    svcBtn.textContent = enabled ? '停止服务' : '启动服务';
+    svcBtn.className = enabled ? 'ghost danger' : 'primary-btn';
+    $('proxy-service-hint').textContent = enabled ? '' : '（点右侧启动）';
+
+    const clients = info.clients || [];
+    const proxyOn = clients.filter((c) => c.proxyEnabled).length;
+    const totalStreams = clients.reduce((s, c) => s + (c.activeStreams || 0), 0);
+    $('proxy-stat-line').textContent = `在线 ${clients.length} · 代理开 ${proxyOn} · 连接 ${totalStreams}`;
+
+    renderProxyRows('tbl-central', clients, info, 'central');
+    renderProxyRows('tbl-encrypted', clients, info, 'encrypted');
+    renderProxyRows('tbl-forward', clients, info, 'forward');
+    await loadProxyConnections();
+  }
+
+  async function loadProxyConnections() {
+    const box = $('proxy-conn-list');
+    if (!box) return;
+    try {
+      const data = await api('/api/tunnels');
+      const list = data.tunnels || [];
+      if (!list.length) {
+        box.textContent = '暂无活跃连接';
+        return;
+      }
+      box.innerHTML = list
+        .map((t) => {
+          const nameMap = {};
+          (state.socks5?.clients || []).forEach((c) => { nameMap[c.id] = c.name || c.id; });
+          const streams = t.streams || [];
+          const detail = streams.length
+            ? streams.map((s) => `${s.target}${s.localPort ? '（本地 ' + s.localPort + '）' : ''}`).join('，')
+            : '已连接，暂无转发目标';
+          return `
+        <div class="tunnel-item">
+          <span>
+            <b>${escapeHtml(nameMap[t.clientId] || t.clientId)}</b>
+            <span class="muted small-text"> · ${escapeHtml(t.remoteAddress || '')}</span>
+            <br /><span class="muted small-text">${escapeHtml(detail)}</span>
+          </span>
+          <button class="ghost danger" data-close-conn="${escapeHtml(t.id)}">断开</button>
+        </div>`;
+        })
+        .join('');
+      for (const btn of box.querySelectorAll('[data-close-conn]')) {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          try {
+            // 默认拉黑 60 秒，避免 agent 立刻重连
+            await api(`/api/tunnels/${encodeURIComponent(btn.dataset.closeConn)}/close`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ blockSeconds: 60 }),
+            });
+            await loadProxyConnections();
+            await loadProxyOverview();
+          } catch (error) {
+            btn.disabled = false;
+            alert(`断开失败: ${error.message}`);
+          }
+        });
+      }
+    } catch (error) {
+      box.textContent = `加载失败: ${error.message}`;
+    }
+  }
+
+  async function showProxyOverview() {
+    state.view = 'proxy';
+    setActiveNav('proxy');
+    switchView('proxy-view');
+    for (const id of ['tbl-central', 'tbl-encrypted', 'tbl-forward']) {
+      $(id).innerHTML = '<tr><td colspan="5" class="muted">加载中...</td></tr>';
+    }
+    try {
+      await loadProxyOverview();
+    } catch (error) {
+      for (const id of ['tbl-central', 'tbl-encrypted', 'tbl-forward']) {
+        $(id).innerHTML = `<tr><td colspan="5" class="error">加载失败: ${escapeHtml(error.message)}</td></tr>`;
+      }
+    }
+  }
+
+  async function toggleSocks5Service() {
+    const enabled = Boolean(state.socks5?.enabled);
+    const ok = await openDialog({
+      title: enabled ? '停止代理服务' : '启动代理服务',
+      message: enabled
+        ? '停止后所有客户端都无法作为出口，正在使用的连接会断开。确认？'
+        : '启动后客户端可被用作代理出口。确认？',
+      confirmText: enabled ? '停止' : '启动',
+      danger: enabled,
+      icon: enabled ? '⏹' : '▶',
+    });
+    if (!ok) return;
+    try {
+      await api(`/api/socks5/${enabled ? 'disable' : 'enable'}`, { method: 'POST' });
+      await loadProxyOverview();
+    } catch (error) {
+      alert(`操作失败: ${error.message}`);
+    }
+  }
+
+  async function rotateSocks5Token() {
+    const ok = await openDialog({
+      title: '重置密码',
+      message: '重置后所有已复制到 Clash 的配置都要重新复制。确认？',
+      confirmText: '重置',
+      danger: true,
+      icon: '🔑',
+    });
+    if (!ok) return;
+    try {
+      await api('/api/socks5/token', { method: 'POST' });
+      await loadProxyOverview();
+    } catch (error) {
+      alert(`重置失败: ${error.message}`);
+    }
+  }
+
+  async function bulkToggleProxy(mode, enabled) {
+    const modeName = { central: '① 中央 SOCKS5', encrypted: '② 本地加密', forward: '③ 端口转发' }[mode] || mode;
+    const label = enabled ? '全部开启' : '全部关闭';
+    const ok = await openDialog({
+      title: `${modeName} · ${label}`,
+      message: enabled
+        ? `允许所有在线客户端使用「${modeName}」。不影响其他两种模式。确认？`
+        : `禁止所有客户端使用「${modeName}」，正在使用的连接会断开。不影响其他两种模式。确认？`,
+      confirmText: label,
+      danger: !enabled,
+      icon: enabled ? '✅' : '⛔',
+    });
+    if (!ok) return;
+    try {
+      await api(`/api/socks5/modes/${mode}/clients`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      await loadProxyOverview();
+    } catch (error) {
+      alert(`操作失败: ${error.message}`);
+    }
+  }
+
 
   async function unrevokeClient(id) {
     const ok = await openDialog({
@@ -428,7 +754,7 @@
       Authorization: `Bearer ${state.token}`,
       ...(options.headers || {}),
     };
-    if (options.body && !(options.body instanceof Blob) && !(options.body instanceof FormData)) {
+    if (options.body && typeof Blob !== 'undefined' && !(options.body instanceof Blob) && !(options.body instanceof FormData)) {
       headers['Content-Type'] = 'application/json';
     }
     const response = await fetch(apiUrl(path), { ...options, headers });
@@ -696,119 +1022,6 @@
     renderClients();
   }
 
-  function renderSocks5Yaml() {
-    const host = $('socks5-host').value.trim() || '<公网IP>';
-    const port = $('socks5-port').value || '1080';
-    const user = state.socks5User || '<clientId>';
-    const pass = $('socks5-pass').value || '<密码>';
-    $('socks5-yaml').textContent = `proxies:
-  - name: ops-${user}
-    type: socks5
-    server: ${host}
-    port: ${port}
-    username: ${user}
-    password: "${pass}"
-    udp: false`;
-  }
-
-  function renderSocks5(data) {
-    const info = data.socks5 || data || {};
-    state.socks5 = info;
-    const enabled = Boolean(info.enabled);
-    const stateEl = $('socks5-state');
-    stateEl.textContent = enabled ? 'running' : 'stopped';
-    stateEl.className = `badge ${enabled ? 'online' : ''}`;
-    $('socks5-toggle').textContent = enabled ? '停用' : '启用';
-    $('socks5-toggle').className = enabled ? 'ghost danger' : 'primary-btn';
-    const host = String(info.publicHost || info.host || '');
-    $('socks5-host').value = host === '0.0.0.0' ? '' : host;
-    $('socks5-port').value = Number(info.port) || 1080;
-    $('socks5-max').value = Number(info.maxStreamsPerClient) || 16;
-    $('socks5-idle').value = Number(info.idleTimeoutSec) || 1800;
-    $('socks5-pass').value = info.token || '';
-    const clients = info.clients || [];
-    if (!state.socks5User || !clients.some((item) => item.id === state.socks5User)) {
-      state.socks5User = clients[0]?.id || '';
-    }
-    $('socks5-user').value = state.socks5User || '';
-    $('socks5-client-list').innerHTML = clients.length
-      ? clients
-          .map(
-            (item) => `<div class="socks5-client ${item.id === state.socks5User ? 'active' : ''}" data-socks-client="${escapeHtml(item.id)}">
-              <span>${escapeHtml(item.name || item.id)}</span><span class="muted">${escapeHtml(item.id)}</span>
-            </div>`,
-          )
-          .join('')
-      : '<div class="muted">没有在线客户端</div>';
-    for (const row of $('socks5-client-list').querySelectorAll('[data-socks-client]')) {
-      row.addEventListener('click', () => {
-        state.socks5User = row.dataset.socksClient;
-        $('socks5-user').value = state.socks5User;
-        for (const other of $('socks5-client-list').querySelectorAll('.socks5-client')) {
-          other.classList.toggle('active', other.dataset.socksClient === state.socks5User);
-        }
-        renderSocks5Yaml();
-      });
-    }
-    renderSocks5Yaml();
-  }
-
-  async function showSocks5() {
-    $('socks5-backdrop').classList.remove('hidden');
-    $('socks5-client-list').textContent = '加载中...';
-    try {
-      const data = await api('/api/socks5');
-      renderSocks5(data);
-    } catch (error) {
-      $('socks5-client-list').textContent = `加载失败: ${error.message}`;
-    }
-  }
-
-  async function toggleSocks5() {
-    const enabled = Boolean(state.socks5?.enabled);
-    try {
-      const data = await api(`/api/socks5/${enabled ? 'disable' : 'enable'}`, { method: 'POST' });
-      renderSocks5(data);
-    } catch (error) {
-      alert(`操作失败: ${error.message}`);
-    }
-  }
-
-  async function rotateSocks5() {
-    const ok = await openDialog({
-      title: '重置 SOCKS5 密码',
-      message: '重置后所有已配置的 Clash/浏览器都要更新密码。',
-      confirmText: '重置',
-      danger: true,
-      icon: '🔑',
-    });
-    if (!ok) return;
-    try {
-      const data = await api('/api/socks5/token', { method: 'POST' });
-      renderSocks5(data);
-    } catch (error) {
-      alert(`重置失败: ${error.message}`);
-    }
-  }
-
-  async function saveSocks5() {
-    try {
-      const data = await api('/api/socks5', {
-        method: 'PUT',
-        body: JSON.stringify({
-          publicHost: $('socks5-host').value.trim(),
-          port: Number($('socks5-port').value),
-          maxStreamsPerClient: Number($('socks5-max').value),
-          idleTimeoutSec: Number($('socks5-idle').value),
-        }),
-      });
-      renderSocks5(data);
-      alert('已保存。修改端口后需要同步调整容器端口映射。');
-    } catch (error) {
-      alert(`保存失败: ${error.message}`);
-    }
-  }
-
   function renderVersionBadge() {
     const el = $('client-version');
     if (!el) return;
@@ -916,7 +1129,9 @@
     setTerminalStatus('就绪');
     $('downloads-view').classList.add('hidden');
     $('revoked-view').classList.add('hidden');
+    $('proxy-view').classList.add('hidden');
     $('empty').classList.add('hidden');
+    setActiveNav('clients');
     $('client-view').classList.remove('hidden');
     $('client-name').textContent = state.selected.displayName || state.selected.name || state.selected.hostname || state.selected.id;
     renderClientMeta();
@@ -947,11 +1162,18 @@
   $('client-search').addEventListener('input', renderClients);
   $('client-status').addEventListener('change', renderClients);
   $('refresh-btn').addEventListener('click', () => loadClients().catch((e) => alert(e.message)));
-  $('downloads-btn').addEventListener('click', showDownloads);
-  $('revoked-btn').addEventListener('click', showRevoked);
-  $('close-revoked-btn').addEventListener('click', showClientOrEmpty);
+  // 顶部导航
+  for (const tab of document.querySelectorAll('.nav-tab')) {
+    tab.addEventListener('click', () => {
+      const v = tab.dataset.view;
+      if (v === 'clients') showClientOrEmpty();
+      else if (v === 'proxy') showProxyOverview();
+      else if (v === 'downloads') showDownloads();
+      else if (v === 'revoked') showRevoked();
+    });
+  }
+  $('proxy-refresh-btn').addEventListener('click', () => loadProxyOverview().catch((e) => alert(e.message)));
   $('empty-downloads-btn').addEventListener('click', showDownloads);
-  $('close-downloads-btn').addEventListener('click', showClientOrEmpty);
   $('reload-downloads-btn').addEventListener('click', () => loadDownloads().catch((e) => alert(e.message)));
   for (const button of document.querySelectorAll('[data-config]')) {
     button.addEventListener('click', () => downloadAgentConfig(button.dataset.config));
@@ -973,37 +1195,18 @@
     }
   });
   $('upgrade-client-btn').addEventListener('click', upgradeClient);
-  $('socks5-btn').addEventListener('click', showSocks5);
-  $('socks5-close').addEventListener('click', () => $('socks5-backdrop').classList.add('hidden'));
-  $('socks5-backdrop').addEventListener('click', (event) => {
-    if (event.target === $('socks5-backdrop')) $('socks5-backdrop').classList.add('hidden');
-  });
-  $('socks5-toggle').addEventListener('click', toggleSocks5);
-  $('socks5-rotate').addEventListener('click', rotateSocks5);
-  $('socks5-save').addEventListener('click', saveSocks5);
-  $('socks5-copy').addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText($('socks5-yaml').textContent || '');
-      $('socks5-copy').textContent = '已复制';
-      setTimeout(() => { $('socks5-copy').textContent = '复制配置'; }, 1500);
-    } catch {
-      alert('复制失败，请手动选中配置');
-    }
-  });
-  for (const id of ['socks5-host', 'socks5-port']) {
-    $(id).addEventListener('input', renderSocks5Yaml);
+  // 代理管理：服务启停 / 密码 / 批量
+  $('proxy-svc-toggle').addEventListener('click', toggleSocks5Service);
+  $('proxy-rotate-token').addEventListener('click', rotateSocks5Token);
+  $('proxy-conn-refresh').addEventListener('click', () => loadProxyConnections());
+  for (const btn of document.querySelectorAll('[data-bulk-mode]')) {
+    btn.addEventListener('click', () => {
+      bulkToggleProxy(btn.dataset.bulkMode, btn.dataset.bulkOn === '1');
+    });
   }
-  $('tunnel-btn').addEventListener('click', showTunnel);
-  $('tunnel-close').addEventListener('click', hideTunnel);
-  for (const radio of document.querySelectorAll('input[name="tunnel-mode"]')) {
-    radio.addEventListener('change', () => setTunnelMode(radio.value));
+  for (const btn of document.querySelectorAll('[data-copy-all]')) {
+    btn.addEventListener('click', () => copyAllYaml(btn.dataset.copyAll));
   }
-  $('tunnel-generate').addEventListener('click', generateTunnelCommand);
-  $('tunnel-copy').addEventListener('click', copyTunnelCommand);
-  $('tunnel-refresh').addEventListener('click', () => loadTunnels().catch((e) => alert(e.message)));
-  $('tunnel-backdrop').addEventListener('click', (event) => {
-    if (event.target === $('tunnel-backdrop')) hideTunnel();
-  });
   $('refresh-client-btn').addEventListener('click', () => refreshClientInfo().catch((e) => alert(e.message)));
   $('rename-client-btn').addEventListener('click', () => renameClient());
   $('delete-client-btn').addEventListener('click', async () => {
@@ -1916,6 +2119,10 @@
       await loadClients();
       loadAgentVersions().catch(() => {});
       setInterval(() => loadClients().catch(() => {}), 15000);
+      // 代理总览页打开时，连接数每 5 秒刷新一次
+      setInterval(() => {
+        if (state.view === 'proxy') loadProxyOverview().catch(() => {});
+      }, 5000);
     } catch {
       showLogin();
     }

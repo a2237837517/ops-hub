@@ -45,6 +45,7 @@ ExecStart=${INSTALL_DIR}/ops-agent run --config ${INSTALL_DIR}/config.json
 WorkingDirectory=${INSTALL_DIR}
 Restart=always
 RestartSec=5
+KillMode=process
 LimitNOFILE=65535
 
 [Install]

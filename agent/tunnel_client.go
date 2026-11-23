@@ -210,6 +210,15 @@ func (c *tunnelClient) connectAndServe(ctx context.Context) error {
 	}
 	query := u.Query()
 	query.Set("clientId", c.clientID)
+	// 区分用途：有 socks5 监听器就是加密代理，否则是端口转发。
+	// hub 侧据此套用不同的黑白名单。
+	if len(c.socks5) > 0 && len(c.forwards) == 0 {
+		query.Set("kind", "encrypted")
+	} else if len(c.forwards) > 0 && len(c.socks5) == 0 {
+		query.Set("kind", "forward")
+	} else if len(c.forwards) > 0 {
+		query.Set("kind", "forward")
+	}
 	u.RawQuery = query.Encode()
 
 	header := http.Header{}

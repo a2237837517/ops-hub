@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ops Hub</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=20261123a" />
 </head>
 <body>
   <div id="login" class="login hidden">
@@ -20,11 +20,14 @@
   <div id="app" class="app hidden">
     <header class="topbar">
       <div class="brand">Ops Hub</div>
+      <nav class="top-nav">
+        <button class="nav-tab active" data-view="clients">客户端</button>
+        <button class="nav-tab" data-view="proxy">代理管理</button>
+        <button class="nav-tab" data-view="downloads">下载</button>
+        <button class="nav-tab" data-view="revoked">封禁</button>
+      </nav>
       <div class="top-actions">
         <span id="hub-status" class="muted">连接中...</span>
-        <button id="downloads-btn" class="ghost">下载客户端</button>
-        <button id="socks5-btn" class="ghost">SOCKS5 服务端</button>
-        <button id="revoked-btn" class="ghost">封禁管理</button>
         <button id="refresh-btn" class="ghost">刷新</button>
         <button id="logout-btn" class="ghost">退出</button>
       </div>
@@ -57,7 +60,6 @@
               <h2>下载客户端</h2>
               <p class="muted">选择目标系统下载安装包，然后按下面的步骤安装。安装包由本机 Hub 直接提供。</p>
             </div>
-            <button id="close-downloads-btn" class="ghost">返回</button>
           </div>
 
           <div class="download-grid">
@@ -105,13 +107,142 @@
           </div>
         </section>
 
+        <section id="proxy-view" class="downloads hidden">
+          <div class="downloads-head">
+            <div>
+              <h2>代理管理</h2>
+              <p class="muted">三种访问方式各一张表，打开开关后可一键复制对应配置。</p>
+            </div>
+            <div class="proxy-head-actions">
+              <button id="proxy-refresh-btn" class="ghost">刷新</button>
+            </div>
+          </div>
+
+          <!-- 服务状态条 -->
+          <div class="proxy-service-bar">
+            <div class="proxy-service-info">
+              <span id="proxy-state" class="badge">off</span>
+              <b id="proxy-endpoint">-</b>
+              <span class="muted small-text" id="proxy-service-hint"></span>
+              <span class="muted small-text" id="proxy-stat-line"></span>
+            </div>
+            <div class="proxy-service-actions">
+              <button id="proxy-svc-toggle" class="primary-btn">启动服务</button>
+              <button id="proxy-rotate-token" class="ghost" title="重置后所有已配置的客户端都要重新复制">重置密码</button>
+            </div>
+          </div>
+
+          <!-- 模式 1 -->
+          <div class="proxy-mode-block">
+            <div class="proxy-mode-head">
+              <h3>① 中央 SOCKS5（公网直连）</h3>
+              <span class="proxy-mode-bulk">
+                <button class="ghost" data-bulk-mode="central" data-bulk-on="1">全部开</button>
+                <button class="ghost danger" data-bulk-mode="central" data-bulk-on="0">全部关</button>
+                <button class="ghost" data-copy-all="central">复制全部</button>
+              </span>
+              <span class="muted small-text">
+                连 <code id="mode1-endpoint">-</code>。需要阿里云安全组放行端口。
+                适合任意设备临时用，明文传输，靠密码保护。
+              </span>
+            </div>
+            <div class="table-wrap proxy-table-wrap">
+              <table class="proxy-table">
+                <thead>
+                  <tr>
+                    <th>客户端</th>
+                    <th>出口 IP</th>
+                    <th>代理</th>
+                    <th>连接</th>
+                    <th>配置</th>
+                  </tr>
+                </thead>
+                <tbody id="tbl-central"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 模式 2 -->
+          <div class="proxy-mode-block">
+            <div class="proxy-mode-head">
+              <h3>② 本地加密 SOCKS5（不开放公网端口）</h3>
+              <span class="proxy-mode-bulk">
+                <button class="ghost" data-bulk-mode="encrypted" data-bulk-on="1">全部开</button>
+                <button class="ghost danger" data-bulk-mode="encrypted" data-bulk-on="0">全部关</button>
+                <button class="ghost" data-copy-all="encrypted">复制全部</button>
+              </span>
+              <span class="muted small-text">
+                走 <code>wss://</code> 443，全程 TLS 加密。需要在你自己的电脑运行一次命令，
+                之后 Clash 填 <code>127.0.0.1:1080</code>。
+              </span>
+            </div>
+            <div class="table-wrap proxy-table-wrap">
+              <table class="proxy-table">
+                <thead>
+                  <tr>
+                    <th>客户端</th>
+                    <th>出口 IP</th>
+                    <th>代理</th>
+                    <th>连接</th>
+                    <th>配置</th>
+                  </tr>
+                </thead>
+                <tbody id="tbl-encrypted"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 模式 3 -->
+          <div class="proxy-mode-block">
+            <div class="proxy-mode-head">
+              <h3>③ 端口转发（访问客户端上的某个端口）</h3>
+              <span class="proxy-mode-bulk">
+                <button class="ghost" data-bulk-mode="forward" data-bulk-on="1">全部开</button>
+                <button class="ghost danger" data-bulk-mode="forward" data-bulk-on="0">全部关</button>
+                <button class="ghost" data-copy-all="forward">复制全部</button>
+              </span>
+              <span class="muted small-text">
+                点「生成命令」后填写<b>目标端口</b>（如 3306 数据库、7002 Web），
+                本地会自动分配一个端口给你。走 wss/443，不开放公网端口。
+              </span>
+            </div>
+            <div class="table-wrap proxy-table-wrap">
+              <table class="proxy-table">
+                <thead>
+                  <tr>
+                    <th>客户端</th>
+                    <th>出口 IP</th>
+                    <th>代理</th>
+                    <th>连接</th>
+                    <th>转发规则</th>
+                  </tr>
+                </thead>
+                <tbody id="tbl-forward"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="proxy-legend muted small-text">
+            「代理」开关是总开关：关掉后该客户端在三种模式下都不可用。
+            「连接」= 中央直连 + 隧道的活跃流数量，鼠标悬停可看分类。
+          </div>
+
+          <div class="proxy-conn-block">
+            <div class="proxy-mode-head">
+              <h3>活跃连接明细</h3>
+              <span class="muted small-text">当前正在经过本机的隧道连接，断开后会拒绝该客户端 60 秒内重连</span>
+              <button id="proxy-conn-refresh" class="ghost">刷新</button>
+            </div>
+            <div id="proxy-conn-list" class="tunnel-list muted">加载中...</div>
+          </div>
+        </section>
+
         <section id="revoked-view" class="downloads hidden">
           <div class="downloads-head">
             <div>
               <h2>封禁管理</h2>
               <p class="muted">删除客户端时会把 clientId 加入封禁列表。解除后，Agent 下一次重连会自动重新注册。</p>
             </div>
-            <button id="close-revoked-btn" class="ghost">返回</button>
           </div>
           <div class="table-wrap">
             <table>
@@ -136,7 +267,6 @@
               <span id="client-badge" class="badge">offline</span>
               <span id="client-version" class="badge version hidden">v-</span>
               <button id="upgrade-client-btn" class="ghost">升级</button>
-              <button id="tunnel-btn" class="ghost">端口转发</button>
               <button id="delete-client-btn" class="ghost danger">删除</button>
             </div>
           </section>
@@ -242,73 +372,6 @@
     </div>
   </div>
 
-  <div id="socks5-backdrop" class="dialog-backdrop hidden">
-    <div class="dialog-card socks5-card" role="dialog" aria-modal="true" aria-labelledby="socks5-title">
-      <div class="dialog-icon">⇄</div>
-      <h3 id="socks5-title">SOCKS5 服务端（需开 1080）</h3>
-      <p class="dialog-message muted">开启后 Clash / 浏览器可以直接使用；被控端不需要安装任何东西。</p>
-      <div class="socks5-status">
-        <span id="socks5-state" class="badge">off</span>
-        <button id="socks5-toggle" class="primary-btn">启用</button>
-        <button id="socks5-rotate" class="ghost">重置密码</button>
-      </div>
-      <p class="socks5-hint muted">外部连不上时，请在阿里云安全组放行 1080（建议只放行你的出口 IP）。修改端口后需要同步调整容器端口映射。</p>
-      <div class="socks5-fields">
-        <label>公网 Host<input id="socks5-host" placeholder="例如 118.31.73.50" /></label>
-        <label>Port<input id="socks5-port" type="number" min="1" max="65535" /></label>
-        <label>最大流数<input id="socks5-max" type="number" min="1" max="128" /></label>
-        <label>空闲超时（秒）<input id="socks5-idle" type="number" min="60" max="86400" /></label>
-      </div>
-      <div class="socks5-cred">
-        <label>用户名（clientId）<input id="socks5-user" readonly /></label>
-        <label>密码<input id="socks5-pass" type="password" readonly /></label>
-      </div>
-      <div class="socks5-clients">
-        <h4>在线客户端（点一下切换用户名）</h4>
-        <div id="socks5-client-list" class="socks5-client-list muted">加载中...</div>
-      </div>
-      <pre id="socks5-yaml" class="tunnel-command"></pre>
-      <div class="socks5-yaml-actions"><button id="socks5-copy" class="ghost">复制配置</button></div>
-      <div class="dialog-actions">
-        <button id="socks5-save" class="dialog-btn primary">保存设置</button>
-        <button id="socks5-close" class="dialog-btn ghost">关闭</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="tunnel-backdrop" class="dialog-backdrop hidden">
-    <div class="dialog-card tunnel-card" role="dialog" aria-modal="true" aria-labelledby="tunnel-title">
-      <div class="dialog-icon">⇄</div>
-      <h3 id="tunnel-title">端口转发 / SOCKS5</h3>
-      <p id="tunnel-desc" class="dialog-message muted">在本地 127.0.0.1 开一个端口，通过当前客户端访问一个固定目标 TCP 端口。命令在你自己电脑上运行。</p>
-      <div class="tunnel-mode">
-        <label><input type="radio" name="tunnel-mode" value="forward" checked /> 端口转发（固定目标）</label>
-        <label><input type="radio" name="tunnel-mode" value="socks5" /> SOCKS5 代理（本地端口，不开新端口）</label>
-      </div>
-      <div id="tunnel-form" class="tunnel-form">
-        <label>本地端口<input id="tunnel-local" class="dialog-input" value="13306" autocomplete="off" /></label>
-        <label id="tunnel-user-select-wrap" class="tunnel-socks-only hidden">
-          <span><input id="tunnel-user-select" type="checkbox" /> 用户名选择 Agent（一个客户端访问全部）</span>
-        </label>
-        <label class="tunnel-target">目标地址<input id="tunnel-host" class="dialog-input" value="127.0.0.1" autocomplete="off" /></label>
-        <label class="tunnel-target">目标端口<input id="tunnel-port" class="dialog-input" value="3306" autocomplete="off" /></label>
-      </div>
-      <button id="tunnel-generate" class="primary-btn">生成命令</button>
-      <pre id="tunnel-command" class="tunnel-command hidden"></pre>
-      <div id="tunnel-actions" class="tunnel-actions hidden">
-        <button id="tunnel-copy" class="ghost">复制命令</button>
-      </div>
-      <div class="tunnel-head">
-        <h4>活跃隧道</h4>
-        <button id="tunnel-refresh" class="ghost">刷新</button>
-      </div>
-      <div id="tunnel-list" class="tunnel-list muted">暂无</div>
-      <div class="dialog-actions">
-        <button id="tunnel-close" class="dialog-btn ghost">关闭</button>
-      </div>
-    </div>
-  </div>
-
   <div id="dialog-backdrop" class="dialog-backdrop hidden">
     <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
       <div id="dialog-icon" class="dialog-icon">✎</div>
@@ -323,6 +386,6 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=20261123a"></script>
 </body>
 </html>

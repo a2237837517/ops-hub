@@ -170,20 +170,111 @@ export async function startHub(config) {
     res.json({ success: true, ...result });
   });
 
-  const socks5Info = () => ({
-    ...socks5.status(),
-    publicHost: config.socks5.publicHost || '',
-    token: config.socks5.token || '',
-    maxStreamsPerClient: Number(config.socks5.maxStreamsPerClient) || 16,
-    idleTimeoutSec: Number(config.socks5.idleTimeoutSec) || 1800,
-    clients: store
-      .listAgents()
-      .filter((agent) => gateway.getConnection(agent.id))
-      .map((agent) => ({
-        id: agent.id,
-        name: agent.displayName || agent.name || agent.hostname || agent.id,
-      })),
+  const socks5Info = () => {
+    const st = socks5.status();
+    const counts = st.streamCounts || {};
+    const tunnelList = tunnels.list();
+    const tunnelStreams = new Map();
+    for (const t of tunnelList) {
+      const live = (t.streams || []).length;
+      if (!live) continue;
+      tunnelStreams.set(t.clientId, (tunnelStreams.get(t.clientId) || 0) + live);
+    }
+
+    const centralAllowed = config.socks5.allowedClients;
+    const encAllowed = config.tunnel?.encryptedClients;
+    const fwdAllowed = config.tunnel?.forwardClients;
+
+    return {
+      ...st,
+      publicHost: config.socks5.publicHost || '',
+      token: config.socks5.token || '',
+      maxStreamsPerClient: Number(config.socks5.maxStreamsPerClient) || 16,
+      idleTimeoutSec: Number(config.socks5.idleTimeoutSec) || 1800,
+      tunnels: tunnelList.length,
+      // 三种模式各自的白名单是否放开
+      modeAllowAll: {
+        central: !Array.isArray(centralAllowed),
+        encrypted: !Array.isArray(encAllowed),
+        forward: !Array.isArray(fwdAllowed),
+      },
+      clients: store
+        .listAgents()
+        .filter((agent) => gateway.getConnection(agent.id))
+        .map((agent) => {
+          const central = !Array.isArray(centralAllowed) || centralAllowed.includes(agent.id);
+          const enc = !Array.isArray(encAllowed) || encAllowed.includes(agent.id);
+          const fwd = !Array.isArray(fwdAllowed) || fwdAllowed.includes(agent.id);
+          return {
+            id: agent.id,
+            name: agent.displayName || agent.name || agent.hostname || agent.id,
+            hostname: agent.hostname || '',
+            version: agent.version || '',
+            remoteAddress: agent.remoteAddress || '',
+            // 兼容旧字段
+            proxyEnabled: central,
+            // 三模式独立开关
+            modes: { central, encrypted: enc, forward: fwd },
+            activeStreams: (counts[agent.id] || 0) + (tunnelStreams.get(agent.id) || 0),
+            centralStreams: counts[agent.id] || 0,
+            tunnelStreams: tunnelStreams.get(agent.id) || 0,
+          };
+        }),
+    };
+  };
+
+  // ===== 三种模式的独立开关 =====
+  // mode: central  → socks5.allowedClients
+  //       encrypted→ tunnel.encryptedClients
+  //       forward  → tunnel.forwardClients
+  const MODE_KEYS = {
+    central: { obj: () => config.socks5, key: 'allowedClients' },
+    encrypted: { obj: () => config.tunnel, key: 'encryptedClients' },
+    forward: { obj: () => config.tunnel, key: 'forwardClients' },
+  };
+
+  function modeState(mode) {
+    const m = MODE_KEYS[mode];
+    if (!m) return null;
+    const container = m.obj();
+    const list = container[m.key];
+    const allowAll = !Array.isArray(list);
+    return { container, key: m.key, list, allowAll };
+  }
+
+  app.post('/api/socks5/modes/:mode/clients/:id', (req, res) => {
+    const mode = String(req.params.mode || '');
+    const st = modeState(mode);
+    if (!st) return res.status(400).json({ success: false, message: 'invalid mode' });
+
+    const clientId = String(req.params.id || '').trim();
+    const agent = store.findAgent(clientId);
+    if (!agent) return res.status(404).json({ success: false, message: 'client not found' });
+
+    const enabled = Boolean(req.body?.enabled);
+    let list = Array.isArray(st.list) ? [...st.list] : store.listAgents().map((a) => a.id);
+    if (enabled) {
+      if (!list.includes(agent.id)) list.push(agent.id);
+    } else {
+      list = list.filter((id) => id !== agent.id);
+    }
+    st.container[st.key] = list;
+    saveRuntimeSettings(config);
+    store.audit('mode.client.toggle', { mode, clientId: agent.id, enabled });
+    res.json({ success: true, socks5: socks5Info() });
   });
+
+  app.post('/api/socks5/modes/:mode/clients', (req, res) => {
+    const mode = String(req.params.mode || '');
+    const st = modeState(mode);
+    if (!st) return res.status(400).json({ success: false, message: 'invalid mode' });
+    const enabled = Boolean(req.body?.enabled);
+    st.container[st.key] = enabled ? undefined : [];
+    saveRuntimeSettings(config);
+    store.audit('mode.clients.bulk', { mode, enabled });
+    res.json({ success: true, socks5: socks5Info() });
+  });
+
 
   app.get('/api/socks5', (_req, res) => {
     res.json({ success: true, socks5: socks5Info() });
@@ -267,10 +358,65 @@ export async function startHub(config) {
     res.json({ success: true, count: list.length, tunnels: list });
   });
 
+  // ===== 端口转发配置（模式③）=====
+  // 转发本身跑在用户自己机器上，这里只记录配置，供面板展示与撤销
+  app.get('/api/forwards', (_req, res) => {
+    res.json({ success: true, forwards: config.forwards || [] });
+  });
+
+  app.post('/api/forwards', (req, res) => {
+    const clientId = String(req.body?.clientId || '').trim();
+    const targetPort = Number(req.body?.targetPort);
+    const localPort = Number(req.body?.localPort);
+    if (!clientId) return res.status(400).json({ success: false, message: 'clientId is required' });
+    if (!Number.isInteger(targetPort) || targetPort <= 0 || targetPort > 65535) {
+      return res.status(400).json({ success: false, message: 'invalid targetPort' });
+    }
+    if (!Number.isInteger(localPort) || localPort <= 0 || localPort > 65535) {
+      return res.status(400).json({ success: false, message: 'invalid localPort' });
+    }
+    const agent = store.findAgent(clientId);
+    if (!agent) return res.status(404).json({ success: false, message: 'client not found' });
+
+    const list = Array.isArray(config.forwards) ? [...config.forwards] : [];
+    const exists = list.find((f) => f.clientId === clientId && f.targetPort === targetPort);
+    if (exists) {
+      exists.localPort = localPort;
+      exists.createdAt = exists.createdAt || new Date().toISOString();
+    } else {
+      list.push({
+        id: `fw_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        clientId,
+        clientName: agent.displayName || agent.name || agent.hostname || clientId,
+        targetPort,
+        localPort,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    config.forwards = list;
+    saveRuntimeSettings(config);
+    store.audit('forward.add', { clientId, targetPort, localPort });
+    res.json({ success: true, forwards: config.forwards });
+  });
+
+  app.delete('/api/forwards/:id', (req, res) => {
+    const id = String(req.params.id || '');
+    const list = Array.isArray(config.forwards) ? config.forwards : [];
+    const next = list.filter((f) => f.id !== id);
+    if (next.length === list.length) {
+      return res.status(404).json({ success: false, message: 'forward not found' });
+    }
+    config.forwards = next;
+    saveRuntimeSettings(config);
+    store.audit('forward.remove', { id });
+    res.json({ success: true, forwards: config.forwards });
+  });
+
   app.post('/api/tunnels/:id/close', (req, res) => {
-    const ok = tunnels.close(String(req.params.id || ''));
+    const blockSec = Number(req.body?.blockSeconds) || 0;
+    const ok = tunnels.close(String(req.params.id || ''), blockSec);
     if (!ok) return res.status(404).json({ success: false, message: 'tunnel not found' });
-    res.json({ success: true });
+    res.json({ success: true, blockSeconds: blockSec });
   });
 
   app.post('/api/clients/:id/tunnel-command', (req, res) => {

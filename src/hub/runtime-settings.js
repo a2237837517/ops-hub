@@ -15,6 +15,10 @@ export function applyRuntimeSettings(config) {
     if (data.tunnel && typeof data.tunnel === 'object') {
       config.tunnel = { ...config.tunnel, ...data.tunnel };
     }
+    // 端口转发配置（模式③）：客户端 -> 目标端口记录，用于面板展示
+    if (Array.isArray(data.forwards)) {
+      config.forwards = data.forwards;
+    }
   } catch {
     // 文件不存在或损坏时使用配置文件默认值
   }
@@ -24,6 +28,13 @@ export function saveRuntimeSettings(config) {
   const target = settingsPath(config);
   const tmp = `${target}.tmp`;
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.writeFileSync(tmp, JSON.stringify({ socks5: config.socks5, tunnel: config.tunnel }, null, 2));
+  fs.writeFileSync(
+    tmp,
+    JSON.stringify(
+      { socks5: config.socks5, tunnel: config.tunnel, forwards: config.forwards || [] },
+      null,
+      2,
+    ),
+  );
   fs.renameSync(tmp, target);
 }

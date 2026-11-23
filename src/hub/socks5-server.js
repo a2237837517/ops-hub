@@ -164,12 +164,20 @@ export class Socks5Server {
 
   status() {
     const cfg = this.cfg;
+    // 按客户端统计活跃连接，供管理面板展示
+    const perClient = new Map();
+    for (const entry of this.streams.values()) {
+      const id = entry.clientId || '';
+      if (!id) continue;
+      perClient.set(id, (perClient.get(id) || 0) + 1);
+    }
     return {
       enabled: Boolean(this.server),
       host: cfg.publicHost || cfg.host || '',
       port: Number(cfg.port) || 1080,
       connections: this.sockets.size,
       streams: this.streams.size,
+      streamCounts: Object.fromEntries(perClient),
     };
   }
 
@@ -223,6 +231,17 @@ export class Socks5Server {
     }
     const agent = this.store.findAgent(username);
     if (!agent || !this.agentGateway.getConnection(agent.id)) {
+      socket.end(Buffer.from([1, 1]));
+      return;
+    }
+    // 代理白名单：allowedClients 未设置 = 全部允许；设置后只放行列出的客户端
+    const allowedClients = this.cfg.allowedClients;
+    if (Array.isArray(allowedClients) && !allowedClients.includes(agent.id)) {
+      this.store.audit('socks5.client.denied', {
+        clientId: agent.id,
+        reason: 'client proxy disabled',
+        remoteAddress: socket.remoteAddress,
+      });
       socket.end(Buffer.from([1, 1]));
       return;
     }
