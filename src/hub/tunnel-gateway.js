@@ -27,6 +27,73 @@ function inCidr(ip, cidr) {
   return (ipInt & mask) === (baseInt & mask);
 }
 
+function ipv4ToBigInt(ip) {
+  const parts = String(ip).split('.').map(Number);
+  if (parts.length !== 4 || parts.some((p) => !Number.isInteger(p) || p < 0 || p > 255)) {
+    return null;
+  }
+  return (BigInt(parts[0]) << 24n) | (BigInt(parts[1]) << 16n) | (BigInt(parts[2]) << 8n) | BigInt(parts[3]);
+}
+
+/** 把 IPv6 文本展开成 128 位 BigInt；非法输入返回 null。 */
+function ipv6ToBigInt(ip) {
+  let text = String(ip).toLowerCase().trim();
+  if (!text.includes(':')) return null;
+  const zoneAt = text.indexOf('%');
+  if (zoneAt >= 0) text = text.slice(0, zoneAt);
+
+  // 支持内嵌 IPv4 写法，例如 ::ffff:192.168.1.1
+  const v4Tail = text.match(/^(.*:)(\d+\.\d+\.\d+\.\d+)$/);
+  if (v4Tail) {
+    const v4 = ipv4ToBigInt(v4Tail[2]);
+    if (v4 === null) return null;
+    text = v4Tail[1] + ((v4 >> 16n) & 0xffffn).toString(16) + ':' + (v4 & 0xffffn).toString(16);
+  }
+
+  const halves = text.split('::');
+  if (halves.length > 2) return null;
+  const left = halves[0] ? halves[0].split(':') : [];
+  const right = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  const missing = 8 - left.length - right.length;
+  if (halves.length === 1 ? left.length !== 8 : missing < 0) return null;
+  const groups = halves.length === 2
+    ? [...left, ...Array(missing).fill('0'), ...right]
+    : left;
+  if (groups.length !== 8) return null;
+
+  let value = 0n;
+  for (const group of groups) {
+    if (!/^[0-9a-f]{1,4}$/.test(group)) return null;
+    value = (value << 16n) | BigInt(parseInt(group, 16));
+  }
+  return value;
+}
+
+/** 同时支持 IPv4 / IPv6 的 CIDR 匹配；地址族不一致时返回 false。 */
+function inCidrAny(ip, cidr) {
+  const text = String(cidr || '').trim();
+  if (!text) return false;
+  const slash = text.indexOf('/');
+  const base = slash >= 0 ? text.slice(0, slash) : text;
+  const bitsText = slash >= 0 ? text.slice(slash + 1) : '';
+  const family = net.isIP(base);
+  if (!family) return false;
+
+  const width = family === 4 ? 32 : 128;
+  const bits = bitsText === '' ? width : Number(bitsText);
+  if (!Number.isInteger(bits) || bits < 0 || bits > width) return false;
+  if (net.isIP(String(ip)) !== family) return false;
+
+  const toInt = family === 4 ? ipv4ToBigInt : ipv6ToBigInt;
+  const ipInt = toInt(ip);
+  const baseInt = toInt(base);
+  if (ipInt === null || baseInt === null) return false;
+  if (bits === 0) return true;
+
+  const mask = ((1n << BigInt(width)) - 1n) ^ ((1n << BigInt(width - bits)) - 1n);
+  return (ipInt & mask) === (baseInt & mask);
+}
+
 export class TunnelGateway {
   constructor({ httpServer, config, store, logger, agentGateway }) {
     this.config = config;
@@ -431,7 +498,14 @@ export class TunnelGateway {
           return `target ${normalized} is not in the allowed CIDRs`;
         }
       } else {
-        return `IPv6 target ${normalized} is not allowed`;
+        // IPv6 目标：只有当 allowedCidrs 显式包含对应的 IPv6 网段时才放行。
+        // 允许 0.0.0.0/0 时同时放开 IPv6（等价于“不限”），避免只有 IPv6 记录的公网域名被拦。
+        const v6Cidrs = cidrs.filter((cidr) => String(cidr).includes(':'));
+        const allAllowed = cidrs.includes('0.0.0.0/0') || v6Cidrs.includes('::/0');
+        if (allAllowed) continue;
+        if (!v6Cidrs.some((cidr) => inCidrAny(normalized, cidr))) {
+          return `IPv6 target ${normalized} is not in the allowed CIDRs`;
+        }
       }
     }
     return '';
