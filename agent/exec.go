@@ -94,8 +94,9 @@ func (a *Agent) startExec(msg Incoming) {
 		startedAt: time.Now(),
 		doneCh:    make(chan struct{}),
 	}
-	if job.maxOutput <= 0 {
-		job.maxOutput = 50 * 1024 * 1024
+	// maxOutput <= 0 表示不限制输出大小（hub 设 maxOutputBytesPerJob=-1 时传 0）
+	if job.maxOutput < 0 {
+		job.maxOutput = 0
 	}
 	a.putJob(job)
 
@@ -278,7 +279,7 @@ func (j *Job) append(a *Agent, stream string, data []byte) {
 	if j.done {
 		return
 	}
-	if j.bytes+int64(len(data)) > j.maxOutput {
+	if j.maxOutput > 0 && j.bytes+int64(len(data)) > j.maxOutput {
 		if !j.truncated {
 			j.truncated = true
 			marker := []byte("\n[output truncated by agent]\n")

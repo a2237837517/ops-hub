@@ -160,7 +160,7 @@ export async function startHub(config) {
       limits: publicLimitFields(config.limits, { onlyExposed: true }),
       activeJobs: jobs.activeCounts(),
       // agent 侧默认值，提示用户两边要一致
-      agentDefaults: { maxConcurrentJobs: 4 },
+      agentDefaults: { maxConcurrentJobs: -1 },
       settingsFile: path.join(config.hub.dataDir, 'settings.json'),
       configFile: config.__file,
     });
@@ -199,7 +199,7 @@ export async function startHub(config) {
       success: true,
       applied,
       limits: publicLimitFields(config.limits, { onlyExposed: true }),
-      note: '已立即生效，容器重启后仍保留（写入 data/settings.json）。agent 侧 maxConcurrentJobs 需要单独改客户端 config.json 并重启服务。',
+      note: '已立即生效，容器重启后仍保留（写入 data/settings.json）。客户端默认不设限，这里改的是服务端侧的额度。',
     });
   });
 
@@ -564,8 +564,9 @@ export async function startHub(config) {
       tags: [os],
       spoolDir: '',
       allowedRoots: os === 'windows' ? ['C:\\', 'D:\\'] : ['/var/log', '/opt', '/home'],
-      maxSpoolMB: 2048,
-      maxConcurrentJobs: 4,
+      maxSpoolMB: -1,
+      maxConcurrentJobs: -1,
+      maxTransferKBps: 0,
       insecureSkipVerify: false,
       caFile: '',
       proxy: '',

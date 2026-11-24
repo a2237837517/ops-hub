@@ -176,7 +176,9 @@
     }
   }
 
-  // 统一视图切换：任何时刻只允许一个主视图可见
+  // 统一视图切换：任何时刻只允许一个主视图可见。
+  // 新增视图只需往 VIEWS 里加 id，不要在任何地方手工 add('hidden')——
+  // 手工隐藏漏一个就会出现两个视图叠在一起（proxy-view、settings-view 都这么踩过）。
   function switchView(target) {
     const VIEWS = ['empty', 'client-view', 'downloads-view', 'revoked-view', 'proxy-view', 'settings-view'];
     for (const id of VIEWS) {
@@ -184,6 +186,10 @@
       if (!el) continue;
       if (id === target) el.classList.remove('hidden');
       else el.classList.add('hidden');
+    }
+    // 兜底：DOM 里可能还有没登记到 VIEWS 的旧视图残留，一并隐藏
+    for (const el of document.querySelectorAll('.main > [id$="-view"], .main > #empty')) {
+      if (!VIEWS.includes(el.id)) el.classList.add('hidden');
     }
   }
 
@@ -1290,12 +1296,10 @@
     loadCommandHistory();
     updateTerminalPrompt();
     setTerminalStatus('就绪');
-    $('downloads-view').classList.add('hidden');
-    $('revoked-view').classList.add('hidden');
-    $('proxy-view').classList.add('hidden');
-    $('empty').classList.add('hidden');
+    // 走统一的 switchView，不要再手工逐个 add('hidden')：
+    // 以前就是这里漏了新加的 proxy-view / settings-view，导致两个视图叠在一起。
+    switchView('client-view');
     setActiveNav('clients');
-    $('client-view').classList.remove('hidden');
     $('client-name').textContent = state.selected.displayName || state.selected.name || state.selected.hostname || state.selected.id;
     renderClientMeta();
     const badge = $('client-badge');
@@ -1389,8 +1393,8 @@
     try {
       await api(`/api/clients/${encodeURIComponent(state.selected.id)}`, { method: 'DELETE' });
       state.selected = null;
-      $('client-view').classList.add('hidden');
-      $('empty').classList.remove('hidden');
+      switchView('empty');
+      setActiveNav('clients');
       await loadClients();
     } catch (error) {
       alert(error.message);

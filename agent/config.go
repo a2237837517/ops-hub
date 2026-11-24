@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const Version = "0.1.23"
+const Version = "0.1.24"
 
 type Config struct {
 	Server               string   `json:"server"`
@@ -46,12 +46,23 @@ type AgentState struct {
 	MachineFingerprint string `json:"machineFingerprint,omitempty"`
 }
 
+// 客户端只负责执行，不设任何限制。
+// 限额统一由 hub（服务端）控制：运维想限就在面板上调，
+// 客户端侧再拦一次只会导致「hub 放行了、客户端拒绝」这种对不上的问题。
+// 以下是默认值（-1 / 0 都表示不限制），配置里写正数可以按机器单独收窄。
+const (
+	unlimitedJobs     = -1 // 并发任务数
+	unlimitedSpoolMB  = -1 // spool 目录不自动清理
+	unlimitedTransfer = 0  // 传输不限速（0 = 不限）
+)
+
 func DefaultConfig() *Config {
 	return &Config{
 		Server:               "ws://127.0.0.1:7100/agent",
 		SpoolDir:             defaultSpoolDir(),
-		MaxSpoolMB:           2048,
-		MaxConcurrentJobs:    4,
+		MaxSpoolMB:           unlimitedSpoolMB,
+		MaxConcurrentJobs:    unlimitedJobs,
+		MaxTransferKBps:      unlimitedTransfer,
 		Tags:                 []string{},
 		AllowedRoots:         []string{},
 		HeartbeatIntervalSec: 15,
@@ -70,11 +81,12 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.SpoolDir == "" {
 		cfg.SpoolDir = defaultSpoolDir()
 	}
-	if cfg.MaxSpoolMB <= 0 {
-		cfg.MaxSpoolMB = 2048
+	// 0 和 -1 都表示不限制；只有明确写了正数才启用限制
+	if cfg.MaxSpoolMB == 0 {
+		cfg.MaxSpoolMB = unlimitedSpoolMB
 	}
-	if cfg.MaxConcurrentJobs <= 0 && cfg.MaxConcurrentJobs != -1 {
-		cfg.MaxConcurrentJobs = 4
+	if cfg.MaxConcurrentJobs == 0 {
+		cfg.MaxConcurrentJobs = unlimitedJobs
 	}
 	if cfg.HeartbeatIntervalSec <= 0 {
 		cfg.HeartbeatIntervalSec = 15
@@ -125,6 +137,7 @@ func LoadConfig(path string) (*Config, error) {
 }
 
 func (c *Config) cleanupSpool() {
+	// MaxSpoolMB <= 0 表示不自动清理（默认）
 	if c.MaxSpoolMB <= 0 {
 		return
 	}

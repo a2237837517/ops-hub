@@ -141,14 +141,27 @@ powershell -Command "netstat -ano | findstr :19002"
 
 ## 7. 限制值（改行为前先看）
 
-| 限制 | 默认值 | 超了会怎样 |
+**客户端（agent）默认不设任何限制**：只负责执行。
+
+| agent 配置 | 默认 | 含义 |
 |---|---|---|
-| 每客户端并发 job | 4 | `startJob` 抛错 |
+| `maxConcurrentJobs` | `-1` | 并发任务不限 |
+| `maxSpoolMB` | `-1` | spool 目录不自动清理 |
+| `maxTransferKBps` | `0` | 传输不限速 |
+
+限额统一由 hub 侧控制，面板「设置」页可改，填 `-1` = 不限制：
+
+| hub 限制 | 默认 | 超了会怎样 |
+|---|---|---|
+| 每客户端并发 job | 4 | `startJob` 抛「并发任务已达上限」，面板可改 -1 |
 | 单 job 输出 | 50MB | 标记 `truncated` |
 | 单次读取 | 256KB | 需要 `offset` 分页 |
-| `command` 长度 | 20000 | 直接拒 |
-| job 超时 | 24h 上限 | agent 杀进程树，`error=timeout` |
-| 上传单文件 | 2GB | `maxFileBytes` 拒 |
+| `command` 长度 | 20000 | 直接拒（不可调） |
+| job 超时 | 24h | agent 杀进程树，面板可改 -1 |
+| 上传单文件 | 2GB | 拒传，面板可改 -1 |
+
+**改客户端限制要动两层**：`config.json` 改了还得重启 `OpsHubAgent` 服务才生效，
+只改文件不重启等于没改。安装包模板 `agent/config.example.json` 已是 `-1`，新装机器不用手动改。
 
 轮询间隔 1 秒足够，别空转。
 
@@ -164,8 +177,28 @@ powershell -Command "netstat -ano | findstr :19002"
 
 ---
 
-## 9. ops-hub 侧安全红线
+## 9. 管理页面：主视图切换（已踩两次）
 
+**现象**：顶部导航切到某个页面，上一页的内容没消失，两个视图上下叠在一起。
+
+**原因**：`public/app.js` 里除了统一的 `switchView()`，还有地方手工写
+`$('xxx-view').classList.add('hidden')` 逐个隐藏。新增视图时那些手工列表不会跟着更新。
+
+已踩过两次：漏了 `proxy-view`，后来加设置页又漏了 `settings-view`。
+
+**规则**：
+
+1. 主视图可见性**只能**通过 `switchView(target)` 控制。
+2. 新增视图 = 在 `index.html` 加 `<section id="xxx-view">` + 把 `xxx-view` 加进
+   `switchView` 里的 `VIEWS` 数组。两处必须同时改。
+3. 不要在任何地方再写 `$('...-view').classList.add/remove('hidden')`。
+4. 有测试兜底：`tests/ui-views.test.js` 会检查 `VIEWS` 是否覆盖 html 里所有主视图、
+   以及有没有手工隐藏主视图的代码。改完跑 `npm test`。
+5. 前端资源用 `?v=` 缓存戳，`app.js` 和 `style.css` 版本号要一致，否则改完浏览器还读旧文件。
+
+---
+
+## 10. ops-hub 侧安全红线
 - 不要 stop / restart 正在跑业务的客户端服务。
 - **只删文件不删目录**；不要 `del /s *.log`、`rd /s /q`。
 - agent 会拒绝受保护路径（`C:\Windows`、`/`、`/etc`、`/home` 等），不要试图绕过。
@@ -174,7 +207,7 @@ powershell -Command "netstat -ano | findstr :19002"
 
 ---
 
-## 10. 收尾检查单（每次 ops-hub 操作后）
+## 11. 收尾检查单（每次 ops-hub 操作后）
 
 ```
 □ 测试端口已释放（LISTENING 里没有）

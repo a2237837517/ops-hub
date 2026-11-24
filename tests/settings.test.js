@@ -50,7 +50,7 @@ test('GET /api/settings 只暴露 3 个关键限额，且支持 -1 不限制', a
 
   assert.equal(res.body.limits.jobTimeoutMs.allowUnlimited, true);
   assert.equal(res.body.limits.maxFileBytes.allowUnlimited, true);
-  assert.deepEqual(res.body.agentDefaults, { maxConcurrentJobs: 4 });
+  assert.deepEqual(res.body.agentDefaults, { maxConcurrentJobs: -1 });
 });
 
 test('PUT /api/settings 设成 -1 表示不限制，并立即不再拦任务', async (t) => {
