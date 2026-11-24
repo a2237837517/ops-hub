@@ -1701,7 +1701,7 @@
         <div class="file-row ${entry.dir ? 'dir' : ''}" data-path="${escapeHtml(entry.path)}" data-dir="${entry.dir ? '1' : '0'}">
           <span>${fileIcon(entry)} ${escapeHtml(entry.name)}</span>
           <span class="row-actions">
-            <span class="size">${entry.dir ? '' : formatBytes(entry.size)} ${escapeHtml(entry.modTime || '')}</span>
+            <span class="size">${entry.dir ? '' : formatBytes(entry.size)} ${escapeHtml(formatTime(entry.modTime))}</span>
             ${entry.dir ? '' : `<button class="row-download" data-download-path="${escapeHtml(entry.path)}" title="下载 ${escapeHtml(entry.name)}">⬇</button>`}
             <button class="row-delete" data-delete-path="${escapeHtml(entry.path)}" data-delete-dir="${entry.dir ? '1' : '0'}" title="删除 ${escapeHtml(entry.name)}">🗑</button>
           </span>
@@ -2092,6 +2092,14 @@
     const data = await api('/api/audit?limit=200');
     const lines = (data.audit || []).filter((item) => !item.clientId || item.clientId === state.selected.id);
     $('audit-output').textContent = lines.map((item) => JSON.stringify(item)).join('\n');
+  }
+
+  function formatTime(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
 
   function formatBytes(n) {
