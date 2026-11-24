@@ -76,13 +76,18 @@ function isObject(value) {
 }
 
 function deepMerge(base, override) {
-  if (!isObject(override)) return base;
-  const out = { ...base };
+  // 必须深拷贝 base：否则没有 override 的嵌套对象会和 DEFAULTS 共用同一个引用，
+  // 运行时改 config.limits 就会污染全局默认值，后续所有实例都跟着变。
+  if (!isObject(override)) return isObject(base) ? deepMerge(base, {}) : base;
+  const out = {};
+  for (const [key, value] of Object.entries(base || {})) {
+    out[key] = isObject(value) ? deepMerge(value, {}) : value;
+  }
   for (const [key, value] of Object.entries(override)) {
     if (isObject(value) && isObject(out[key])) {
       out[key] = deepMerge(out[key], value);
     } else {
-      out[key] = value;
+      out[key] = isObject(value) ? deepMerge(value, {}) : value;
     }
   }
   return out;

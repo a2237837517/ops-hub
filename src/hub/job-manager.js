@@ -46,8 +46,9 @@ export class JobManager {
     if (!agent) throw new Error(`客户端不存在: ${clientId}`);
     if (!this.gateway.isOnline(clientId)) throw new Error(`客户端不在线: ${clientId}`);
 
-    const maxConcurrent = Number(this.config.limits.maxConcurrentJobsPerClient) || 4;
-    if (this._activeCount(clientId) >= maxConcurrent) {
+    const maxConcurrent = Number(this.config.limits.maxConcurrentJobsPerClient);
+    // -1 = 不限制
+    if (maxConcurrent > 0 && this._activeCount(clientId) >= maxConcurrent) {
       throw new Error(`客户端并发任务已达上限 ${maxConcurrent}，请先等待或取消其它任务`);
     }
 
@@ -70,11 +71,15 @@ export class JobManager {
     const jobId = randomId('job');
     const outputPath = path.join(this.config.hub.dataDir, 'jobs', `${jobId}.log`);
     fs.writeFileSync(outputPath, '');
-    const timeoutMs = clamp(
-      options.timeoutMs || this.config.limits.jobTimeoutMs,
-      1000,
-      Number(this.config.limits.jobTimeoutMs) || 24 * 60 * 60 * 1000,
-    );
+    const limitMs = Number(this.config.limits.jobTimeoutMs);
+    // jobTimeoutMs = -1 表示不限制，给个十年足够长
+    const timeoutMs = limitMs === -1
+      ? 10 * 365 * 24 * 60 * 60 * 1000
+      : clamp(
+          options.timeoutMs || limitMs || 24 * 60 * 60 * 1000,
+          1000,
+          limitMs > 0 ? limitMs : 10 * 365 * 24 * 60 * 60 * 1000,
+        );
 
     const job = {
       id: jobId,
@@ -119,7 +124,9 @@ export class JobManager {
       cwd: job.cwd,
       env: job.env,
       timeoutMs,
-      maxOutputBytes: this.config.limits.maxOutputBytesPerJob,
+      maxOutputBytes: Number(this.config.limits.maxOutputBytesPerJob) === -1
+        ? 0
+        : this.config.limits.maxOutputBytesPerJob,
       createdAt: job.createdAt,
     });
     if (!sent) {
@@ -158,8 +165,10 @@ export class JobManager {
       return;
     }
     let data = Buffer.from(String(msg.data || ''), 'base64');
-    if (job.outputBytes + data.length > this.config.limits.maxOutputBytesPerJob) {
-      const remaining = Math.max(0, this.config.limits.maxOutputBytesPerJob - job.outputBytes);
+    const outputLimit = Number(this.config.limits.maxOutputBytesPerJob);
+    // -1 = 不限制输出大小
+    if (outputLimit > 0 && job.outputBytes + data.length > outputLimit) {
+      const remaining = Math.max(0, outputLimit - job.outputBytes);
       data = data.subarray(0, remaining);
       this.store.updateJob(job.id, { truncated: true });
     }
@@ -364,6 +373,17 @@ export class JobManager {
 
   listJobs(options) {
     return this.store.listJobs(options);
+  }
+
+  // 面板「设置」页展示用：每台客户端当前的活跃任务数
+  // 直接读 store.state，不用 listJobs（它有 limit 截断，老的长任务会被切掉）
+  activeCounts() {
+    const counts = {};
+    for (const job of Object.values(this.store.state.jobs || {})) {
+      if (![JOB_STATUS.QUEUED, JOB_STATUS.RUNNING, JOB_STATUS.EXITING].includes(job.status)) continue;
+      counts[job.clientId] = (counts[job.clientId] || 0) + 1;
+    }
+    return counts;
   }
 
   cancelJob(jobId, actor = 'unknown') {

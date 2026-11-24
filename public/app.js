@@ -15,6 +15,8 @@
     historyIndex: -1,
     historyDraft: '',
     terminalBusy: false,
+    settings: null,
+    limitDefaults: null,
     filePath: '',
     selectedFile: null,
     tailCursor: null,
@@ -176,7 +178,7 @@
 
   // 统一视图切换：任何时刻只允许一个主视图可见
   function switchView(target) {
-    const VIEWS = ['empty', 'client-view', 'downloads-view', 'revoked-view', 'proxy-view'];
+    const VIEWS = ['empty', 'client-view', 'downloads-view', 'revoked-view', 'proxy-view', 'settings-view'];
     for (const id of VIEWS) {
       const el = $(id);
       if (!el) continue;
@@ -235,6 +237,167 @@
       await loadRevoked();
     } catch (error) {
       $('revoked-body').innerHTML = `<tr><td colspan="3" class="error">加载失败: ${escapeHtml(error.message)}</td></tr>`;
+    }
+  }
+
+  // ===== 设置页：运行时限额 =====
+
+  const LIMIT_ORDER = ['maxConcurrentJobsPerClient', 'jobTimeoutMs', 'maxFileBytes'];
+
+  function formatLimit(key, value, meta) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return String(value);
+    if (n === -1 && meta.allowUnlimited) return '不限制';
+    if (meta.unit === 'bytes') {
+      if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(n % 1024 ** 3 ? 1 : 0)} GB`;
+      if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(0)} MB`;
+      if (n >= 1024) return `${(n / 1024).toFixed(0)} KB`;
+      return `${n} B`;
+    }
+    if (key === 'jobTimeoutMs') {
+      const min = n / 60000;
+      if (min >= 60) return `${(min / 60).toFixed(min % 60 ? 1 : 0)} 小时`;
+      return `${min.toFixed(0)} 分钟`;
+    }
+    return `${n} ${meta.unit || ''}`.trim();
+  }
+
+  function renderSettings(data) {
+    state.settings = data;
+    const limits = data.limits || {};
+    const box = $('settings-limits');
+    box.innerHTML = LIMIT_ORDER.filter((key) => limits[key])
+      .map((key) => {
+        const meta = limits[key];
+        const unlimited = Number(meta.value) === -1;
+        return `
+          <div class="settings-item${unlimited ? ' is-unlimited' : ''}">
+            <label for="limit-${key}">
+              <span class="settings-label">${escapeHtml(meta.label)}</span>
+              <span class="settings-current">当前 ${escapeHtml(formatLimit(key, meta.value, meta))}</span>
+            </label>
+            <div class="settings-input-row">
+              <input id="limit-${key}" data-limit="${key}" data-unit="${meta.unit}" type="number"
+                min="${meta.min}" max="${meta.max}" step="1" value="${meta.value}" />
+              ${meta.allowUnlimited
+                ? `<button type="button" class="ghost settings-unlimited-btn${unlimited ? ' active' : ''}"
+                     data-unlimited="${key}">不限制</button>`
+                : ''}
+            </div>
+            <p class="settings-live muted small-text" data-live="${key}">= ${escapeHtml(formatLimit(key, meta.value, meta))}</p>
+            <p class="settings-hint muted small-text">${escapeHtml(meta.hint)}</p>
+          </div>`;
+      })
+      .join('');
+
+    // 输入时实时显示换算值，避免只看到 86400000 这种裸数字
+    for (const input of box.querySelectorAll('[data-limit]')) {
+      input.addEventListener('input', () => {
+        const key = input.dataset.limit;
+        const meta = limits[key];
+        const live = box.querySelector(`[data-live="${key}"]`);
+        if (!live || !meta) return;
+        const value = Number(input.value);
+        const unlimited = value === -1 && meta.allowUnlimited;
+        const outOfRange = !unlimited && (!Number.isFinite(value) || value < meta.min || value > meta.max);
+        live.textContent = unlimited
+          ? '= 不限制'
+          : outOfRange
+            ? `超出范围 ${meta.allowUnlimited ? '-1 或 ' : ''}${meta.min} - ${meta.max}`
+            : `= ${formatLimit(key, value, meta)}`;
+        live.className = `settings-live small-text ${outOfRange ? 'error' : 'muted'}`;
+        // 同步按钮高亮
+        const btn = box.querySelector(`[data-unlimited="${key}"]`);
+        if (btn) btn.classList.toggle('active', unlimited);
+      });
+    }
+
+    // 「不限制」按钮：一键 -1，再点一下恢复默认
+    for (const btn of box.querySelectorAll('[data-unlimited]')) {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.unlimited;
+        const input = box.querySelector(`[data-limit="${key}"]`);
+        const meta = limits[key];
+        if (!input || !meta) return;
+        const nowUnlimited = Number(input.value) === -1;
+        input.value = nowUnlimited ? (state.limitDefaults[key] || meta.max) : -1;
+        input.dispatchEvent(new Event('input'));
+      });
+    }
+
+    const active = data.activeJobs || {};
+    const clientById = new Map(state.clients.map((c) => [c.id, c]));
+    const limit = Number(limits.maxConcurrentJobsPerClient?.value) || 4;
+    const rows = Object.entries(active).map(([clientId, count]) => {
+      const client = clientById.get(clientId);
+      const name = client ? client.name || client.hostname || clientId : clientId;
+      const pct = Math.min(100, Math.round((count / limit) * 100));
+      const cls = count >= limit ? 'error' : count / limit >= 0.75 ? 'warn' : 'ok';
+      return `<tr>
+        <td>${escapeHtml(name)}</td>
+        <td class="${cls}">${count} / ${limit}</td>
+        <td><div class="bar"><span style="width:${pct}%"></span></div></td>
+      </tr>`;
+    });
+    $('settings-active-body').innerHTML = rows.length
+      ? rows.join('')
+      : '<tr><td colspan="3" class="muted">当前没有运行中的任务</td></tr>';
+  }
+
+  async function loadSettings() {
+    const data = await api('/api/settings');
+    // 记下服务端默认值，供「不限制」按钮切回来用
+    if (!state.limitDefaults) {
+      state.limitDefaults = {};
+      for (const [key, meta] of Object.entries(data.limits || {})) {
+        if (Number(meta.value) !== -1) state.limitDefaults[key] = meta.value;
+      }
+    }
+    renderSettings(data);
+    $('settings-msg').textContent = '';
+    $('settings-msg').className = 'settings-msg';
+  }
+
+  async function saveSettings() {
+    const msg = $('settings-msg');
+    const payload = { limits: {} };
+    for (const input of document.querySelectorAll('[data-limit]')) {
+      const value = Number(input.value);
+      if (!Number.isFinite(value)) {
+        msg.textContent = `${input.dataset.limit} 不是有效数字`;
+        msg.className = 'settings-msg error';
+        return;
+      }
+      payload.limits[input.dataset.limit] = value;
+    }
+    $('settings-save-btn').disabled = true;
+    try {
+      const result = await api('/api/settings', {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+      msg.textContent = result.note || '已保存';
+      msg.className = 'settings-msg ok';
+      await loadSettings();
+      msg.textContent = result.note || '已保存';
+      msg.className = 'settings-msg ok';
+    } catch (error) {
+      msg.textContent = `保存失败: ${error.message}`;
+      msg.className = 'settings-msg error';
+    } finally {
+      $('settings-save-btn').disabled = false;
+    }
+  }
+
+  async function showSettings() {
+    state.view = 'settings';
+    setActiveNav('settings');
+    switchView('settings-view');
+    try {
+      await loadSettings();
+    } catch (error) {
+      $('settings-msg').textContent = `加载失败: ${error.message}`;
+      $('settings-msg').className = 'settings-msg error';
     }
   }
 
@@ -1170,9 +1333,12 @@
       else if (v === 'proxy') showProxyOverview();
       else if (v === 'downloads') showDownloads();
       else if (v === 'revoked') showRevoked();
+      else if (v === 'settings') showSettings();
     });
   }
   $('proxy-refresh-btn').addEventListener('click', () => loadProxyOverview().catch((e) => alert(e.message)));
+  $('settings-reload-btn').addEventListener('click', () => loadSettings().catch((e) => alert(e.message)));
+  $('settings-save-btn').addEventListener('click', () => saveSettings());
   $('empty-downloads-btn').addEventListener('click', showDownloads);
   $('reload-downloads-btn').addEventListener('click', () => loadDownloads().catch((e) => alert(e.message)));
   for (const button of document.querySelectorAll('[data-config]')) {

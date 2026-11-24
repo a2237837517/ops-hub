@@ -909,3 +909,60 @@ td.command { max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
   cursor: pointer; font-size: 14px; line-height: 1; padding: 0 4px;
 }
 .fwd-remove:hover { color: #b0483f; }
+
+/* ===== 设置页 ===== */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+  margin-bottom: 26px;
+}
+.settings-item {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.settings-item label {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 10px; margin-bottom: 8px; cursor: pointer;
+}
+.settings-label { font-weight: 600; font-size: 14px; }
+.settings-current { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.settings-item input[type="number"] {
+  width: 100%; box-sizing: border-box;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
+  padding: 7px 10px; color: var(--text); font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.settings-item input[type="number"]:focus {
+  outline: none; border-color: var(--accent);
+}
+.settings-hint { margin: 8px 0 0; line-height: 1.5; }
+.settings-subhead { font-size: 15px; margin: 0 0 6px; }
+.settings-msg { min-height: 20px; margin: 0 0 12px; font-size: 13px; }
+.settings-msg.ok { color: var(--accent); }
+.settings-msg.error { color: var(--red); }
+.settings-view .downloads-actions { display: flex; gap: 8px; }
+
+/* 占用率进度条 */
+.bar {
+  width: 100%; height: 7px; border-radius: 999px;
+  background: rgba(255,255,255,.08); overflow: hidden;
+}
+.bar span { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+td.error .bar span, .bar span.error { background: var(--red); }
+.settings-live { margin: 6px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.settings-live.error { color: var(--red); }
+
+/* 不限制相关 */
+.settings-input-row { display: flex; gap: 8px; align-items: stretch; }
+.settings-input-row input[type="number"] { flex: 1 1 auto; }
+.settings-unlimited-btn {
+  flex: 0 0 auto; font-size: 12px; padding: 0 10px; white-space: nowrap;
+}
+.settings-unlimited-btn.active {
+  border-color: var(--accent); color: var(--accent);
+  background: rgba(74,158,255,.12);
+}
+.settings-item.is-unlimited { border-color: rgba(74,158,255,.45); }

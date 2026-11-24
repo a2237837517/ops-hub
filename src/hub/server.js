@@ -9,6 +9,7 @@ import { FileManager } from './file-manager.js';
 import { TunnelGateway } from './tunnel-gateway.js';
 import { Socks5Server } from './socks5-server.js';
 import { applyRuntimeSettings, saveRuntimeSettings } from './runtime-settings.js';
+import { publicLimitFields, LIMIT_SPEC, UNLIMITED } from './limit-spec.js';
 import { loadManifest, requestUpgrade } from './upgrade.js';
 import { appendChunk, cleanupStaleUploads, completeUpload, createUpload } from './resumable-upload.js';
 import { Store } from '../store.js';
@@ -135,6 +136,11 @@ export async function startHub(config) {
         dataDir: config.hub.dataDir,
       },
       limits: config.limits,
+      // 面板可改的运行时限额，附当前占用情况，方便判断要不要调
+      runtime: {
+        limits: publicLimitFields(config.limits),
+        activeJobs: jobs.activeCounts(),
+      },
       tunnel: {
         enabled: Boolean(config.tunnel?.enabled),
         allowedCidrs: config.tunnel?.allowedCidrs || [],
@@ -144,6 +150,56 @@ export async function startHub(config) {
         allowedUploadRoots: config.security.allowedUploadRoots,
         requireApprovalForDangerous: config.security.requireApprovalForDangerous,
       },
+    });
+  });
+
+  // 面板「设置」页：只返回会卡住运维动作的几项
+  app.get('/api/settings', (_req, res) => {
+    res.json({
+      success: true,
+      limits: publicLimitFields(config.limits, { onlyExposed: true }),
+      activeJobs: jobs.activeCounts(),
+      // agent 侧默认值，提示用户两边要一致
+      agentDefaults: { maxConcurrentJobs: 4 },
+      settingsFile: path.join(config.hub.dataDir, 'settings.json'),
+      configFile: config.__file,
+    });
+  });
+
+  app.put('/api/settings', (req, res) => {
+    const body = req.body || {};
+    const incoming = body.limits || {};
+    const applied = {};
+    const rejected = [];
+    for (const key of Object.keys(LIMIT_SPEC)) {
+      if (incoming[key] === undefined) continue;
+      const value = Number(incoming[key]);
+      const spec = LIMIT_SPEC[key];
+      // -1 = 不限制，只对允许不限的项放行
+      const unlimited = value === UNLIMITED && spec.min === UNLIMITED;
+      if (!unlimited && (!Number.isFinite(value) || value < spec.min || value > spec.max)) {
+        const lower = spec.min === UNLIMITED ? `-1 或 ${spec.min + 1}` : spec.min;
+        rejected.push(`${key} 必须在 ${lower} - ${spec.max} 之间（-1 = 不限制）`);
+        continue;
+      }
+      config.limits[key] = unlimited ? UNLIMITED : Math.round(value);
+      applied[key] = config.limits[key];
+    }
+    if (rejected.length) {
+      // 有非法项就不落盘，避免存进半套配置
+      return res.status(400).json({ success: false, message: rejected.join('；'), rejected });
+    }
+    if (!Object.keys(applied).length) {
+      return res.status(400).json({ success: false, message: '没有需要更新的字段' });
+    }
+    saveRuntimeSettings(config);
+    store.audit('settings.update', { applied, by: 'web' });
+    logger.info(`运行时限额已更新: ${JSON.stringify(applied)}`);
+    res.json({
+      success: true,
+      applied,
+      limits: publicLimitFields(config.limits, { onlyExposed: true }),
+      note: '已立即生效，容器重启后仍保留（写入 data/settings.json）。agent 侧 maxConcurrentJobs 需要单独改客户端 config.json 并重启服务。',
     });
   });
 

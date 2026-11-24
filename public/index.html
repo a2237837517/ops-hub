@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ops Hub</title>
-  <link rel="stylesheet" href="style.css?v=20261123a" />
+  <link rel="stylesheet" href="style.css?v=20261124b" />
 </head>
 <body>
   <div id="login" class="login hidden">
@@ -25,6 +25,7 @@
         <button class="nav-tab" data-view="proxy">代理管理</button>
         <button class="nav-tab" data-view="downloads">下载</button>
         <button class="nav-tab" data-view="revoked">封禁</button>
+        <button class="nav-tab" data-view="settings">设置</button>
       </nav>
       <div class="top-actions">
         <span id="hub-status" class="muted">连接中...</span>
@@ -252,6 +253,33 @@
           </div>
         </section>
 
+        <section id="settings-view" class="downloads hidden">
+          <div class="downloads-head">
+            <div>
+              <h2>设置</h2>
+              <p class="muted">运行时限额。保存后立即生效并写入 <code>data/settings.json</code>，容器重启后保留。</p>
+            </div>
+            <div class="downloads-actions">
+              <button id="settings-reload-btn" class="ghost">重新读取</button>
+              <button id="settings-save-btn" class="primary-btn">保存</button>
+            </div>
+          </div>
+          <p id="settings-msg" class="settings-msg"></p>
+          <div id="settings-limits" class="settings-grid"></div>
+
+          <h3 class="settings-subhead">当前活跃任务</h3>
+          <p class="muted small-text">
+            超过「每客户端并发任务上限」后，新任务会被直接拒绝（报「并发任务已达上限」）。
+            agent 侧 <code>maxConcurrentJobs</code> 需单独改客户端 <code>config.json</code> 并重启服务，两边要一致。
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>客户端</th><th>活跃任务</th><th>占用率</th></tr></thead>
+              <tbody id="settings-active-body"></tbody>
+            </table>
+          </div>
+        </section>
+
         <div id="client-view" class="hidden">
           <section class="client-head">
             <div>
@@ -386,6 +414,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261123a"></script>
+  <script src="app.js?v=20261124b"></script>
 </body>
 </html>

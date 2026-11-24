@@ -73,7 +73,7 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.MaxSpoolMB <= 0 {
 		cfg.MaxSpoolMB = 2048
 	}
-	if cfg.MaxConcurrentJobs <= 0 {
+	if cfg.MaxConcurrentJobs <= 0 && cfg.MaxConcurrentJobs != -1 {
 		cfg.MaxConcurrentJobs = 4
 	}
 	if cfg.HeartbeatIntervalSec <= 0 {

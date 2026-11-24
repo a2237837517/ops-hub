@@ -63,7 +63,8 @@ func (a *Agent) activeJobCount() int {
 }
 
 func (a *Agent) startExec(msg Incoming) {
-	if a.activeJobCount() >= a.cfg.MaxConcurrentJobs {
+	// MaxConcurrentJobs = -1 表示不限制
+	if a.cfg.MaxConcurrentJobs > 0 && a.activeJobCount() >= a.cfg.MaxConcurrentJobs {
 		_ = a.send(map[string]any{
 			"type":    "exec.error",
 			"jobId":   msg.JobID,

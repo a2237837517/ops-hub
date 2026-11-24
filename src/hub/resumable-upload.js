@@ -82,7 +82,7 @@ export function createUpload({ config, clientId, remotePath, size }) {
   const total = Number(size) || 0;
   if (!remotePath) throw httpError(400, 'path is required');
   if (total <= 0) throw httpError(400, 'size is required');
-  if (total > config.limits.maxFileBytes) {
+  if (config.limits.maxFileBytes > 0 && total > config.limits.maxFileBytes) {
     throw httpError(413, `file exceeds maxFileBytes (${config.limits.maxFileBytes})`);
   }
   const id = randomId('up');

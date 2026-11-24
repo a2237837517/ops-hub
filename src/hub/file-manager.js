@@ -100,7 +100,7 @@ export class FileManager {
     const local = this._resolveLocalUpload(localPath);
     const stat = fs.statSync(local);
     if (!stat.isFile()) throw new Error(`不是普通文件: ${local}`);
-    if (stat.size > this.config.limits.maxFileBytes) {
+    if (this.config.limits.maxFileBytes > 0 && stat.size > this.config.limits.maxFileBytes) {
       throw new Error(`文件超过上限 ${this.config.limits.maxFileBytes} 字节`);
     }
     const transferId = randomId('up');
@@ -371,6 +371,8 @@ export class FileManager {
   }
 
   clampReadBytes(value) {
-    return clamp(value || 64 * 1024, 1024, this.config.limits.maxReadBytes);
+    const limit = Number(this.config.limits.maxReadBytes);
+    if (!(limit > 0)) return Math.max(1024, Number(value) || 64 * 1024);
+    return clamp(value || 64 * 1024, 1024, limit);
   }
 }
