@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ops Hub</title>
-  <link rel="stylesheet" href="style.css?v=20261124c" />
+  <link rel="stylesheet" href="style.css?v=20261125b" />
 </head>
 <body>
   <div id="login" class="login hidden">
@@ -37,13 +37,18 @@
     <div class="layout">
       <aside class="sidebar">
         <div class="sidebar-head">
-          <input id="client-search" placeholder="搜索客户端..." />
+          <div class="search-box">
+            <span class="search-icon" aria-hidden="true">⌕</span>
+            <input id="client-search" placeholder="搜索名称 / IP / 系统 / 标签" autocomplete="off" />
+            <button id="client-search-clear" class="search-clear hidden" title="清除 (Esc)" aria-label="清除搜索">✕</button>
+          </div>
           <select id="client-status">
             <option value="">全部</option>
             <option value="online">在线</option>
             <option value="offline">离线</option>
           </select>
         </div>
+        <div id="client-search-hint" class="search-hint hidden"></div>
         <div id="client-list" class="client-list"></div>
       </aside>
 
@@ -414,6 +419,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261124c"></script>
+  <script src="app.js?v=20261125b"></script>
 </body>
 </html>

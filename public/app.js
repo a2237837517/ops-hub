@@ -132,6 +132,17 @@
   $('dialog-backdrop').addEventListener('click', (event) => {
     if (event.target === $('dialog-backdrop')) closeDialog(null);
   });
+  // 全局快捷键：/ 聚焦搜索，Esc 清空搜索
+  document.addEventListener('keydown', (event) => {
+    const tag = (event.target.tagName || '').toLowerCase();
+    const typing = tag === 'input' || tag === 'textarea' || tag === 'select';
+    if (event.key === '/' && !typing && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.preventDefault();
+      $('client-search').focus();
+      $('client-search').select();
+    }
+  });
+
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     if ($('dialog-backdrop').classList.contains('hidden')) return;
@@ -981,18 +992,63 @@
     }
   }
 
+  // 搜索状态提示：有筛选条件时才显示 x / y
+  function renderSearchState(shown, total, filtering) {
+    const clearBtn = $('client-search-clear');
+    if (clearBtn) clearBtn.classList.toggle('hidden', !$('client-search').value);
+    const hint = $('client-search-hint');
+    if (!hint) return;
+    if (!filtering) {
+      hint.classList.add('hidden');
+      hint.textContent = '';
+      return;
+    }
+    hint.classList.remove('hidden');
+    hint.innerHTML = `匹配 <b>${shown}</b> / ${total} 台`;
+  }
+
+  function clearSearch() {
+    $('client-search').value = '';
+    renderClients();
+    $('client-search').focus();
+  }
+
   function renderClients() {
     const query = $('client-search').value.trim().toLowerCase();
     const status = $('client-status').value;
+
+    // 搜索支持多关键词（空格分隔，全部命中才算匹配），
+    // 例如「win 在线」「192.168 2022」「皖西 server」。
+    const terms = query ? query.split(/\s+/).filter(Boolean) : [];
     const list = state.clients.filter((client) => {
       if (status && client.status !== status) return false;
-      if (!query) return true;
-      return [client.id, client.name, client.group, client.hostname, client.os, ...(client.tags || [])]
+      if (!terms.length) return true;
+      const haystack = [
+        client.id,
+        client.name,
+        client.displayName,
+        client.group,
+        client.hostname,
+        client.os,
+        client.info?.platform,
+        client.primaryIp,
+        client.remoteAddress,
+        client.version,
+        ...(client.tags || []),
+      ]
         .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(query));
+        .join(' ')
+        .toLowerCase();
+      return terms.every((term) => haystack.includes(term));
     });
+
+    renderSearchState(list.length, state.clients.length, Boolean(query || status));
+
     if (!list.length) {
-      clientList.innerHTML = '<div class="muted" style="padding:12px">没有匹配的客户端</div>';
+      const tip = query
+        ? `没有匹配「${escapeHtml($('client-search').value.trim())}」的客户端`
+        : '没有符合条件的客户端';
+      clientList.innerHTML = `<div class="empty-hint"><div>${tip}</div><div class="muted small-text">试试名称、IP、系统或标签的一部分</div></div>`;
       return;
     }
 
@@ -1004,11 +1060,13 @@
       groups.get(key).push(client);
     }
 
+    // 搜索时强制展开所有分组，否则命中的机器可能藏在折叠组里看不到
+    const searching = terms.length > 0;
     clientList.innerHTML = [...groups.entries()]
       .sort(([a], [b]) => String(a).localeCompare(String(b), 'zh-CN'))
       .map(([group, clients]) => {
         const online = clients.filter((client) => client.status === 'online').length;
-        const collapsed = state.collapsedGroups.has(group);
+        const collapsed = searching ? false : state.collapsedGroups.has(group);
         const items = clients
           .map((client) => {
             const label =
@@ -1327,6 +1385,19 @@
   }
 
   $('client-search').addEventListener('input', renderClients);
+  $('client-search').addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      clearSearch();
+      return;
+    }
+    // 上下键在搜索结果间移动，Enter 打开
+    if (event.key === 'Enter') {
+      const first = clientList.querySelector('.client-item');
+      if (first) first.click();
+    }
+  });
+  $('client-search-clear').addEventListener('click', clearSearch);
   $('client-status').addEventListener('change', renderClients);
   $('refresh-btn').addEventListener('click', () => loadClients().catch((e) => alert(e.message)));
   // 顶部导航
